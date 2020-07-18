@@ -1,4 +1,4 @@
-package datapipes.pipeline.dataflow;
+package com.mozafaq.dataflow.pipeline;
 
 import java.util.Collections;
 import java.util.List;

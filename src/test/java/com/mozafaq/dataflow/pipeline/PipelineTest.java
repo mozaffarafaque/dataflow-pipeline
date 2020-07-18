@@ -1,4 +1,4 @@
-package datapipes.pipeline.dataflow;
+package com.mozafaq.dataflow.pipeline;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
