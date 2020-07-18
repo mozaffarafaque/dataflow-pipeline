@@ -56,15 +56,5 @@ This is supposed to run on single host.
 
  ```mvn clean insall```
 
-## Sample Commands
-
-### Pipeline Execution
-
-```
-java -cp <CODEBASE_LOCATION>/datapipes/apprunner/target/datapipes-apprunner.jar \
- datapipes.apprunner.pipeline.workflow.PipelineWorkflowRunner \
- datapipes.pipeline.dataflow.TestSimplestPipelineCreator
-```
-
 ## Contributors
  - Mozaffar Afaque
