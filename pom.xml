@@ -7,7 +7,7 @@
 
     <groupId>com.mozafaq</groupId>
     <packaging>jar</packaging>
-    <version>1.0.3-SNAPSHOT</version>
+    <version>1.0.4-SNAPSHOT</version>
     <artifactId>dataflow-pipeline</artifactId>
 
     <name>Dataflow pipeline</name>
