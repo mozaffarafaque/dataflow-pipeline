@@ -3,6 +3,7 @@ package com.mozafaq.dataflow.pipeline;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -10,45 +11,34 @@ import java.util.List;
  */
 public class PipelineChainImpl<T> implements PipelineChain<T> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PipelineChainImpl.class);
-    private Transformer transformer;
-    private List<PipelineChain> chains;
+    private List<NodeMoveAware> chains;
     private String name;
 
-    public static final PipelineChain PIPELINE_CHAIN = new PipelineChain() {
+    public static final PipelineChainImpl PIPELINE_CHAIN_SINK = new PipelineChainImpl("<Sink>", Collections.emptyList()) {
         @Override
         public void output(Object out) {}
         @Override
         public void onComplete() {}
-
         @Override
-        public String getName() {
-            return "<Sink>";
-        }
-
-        @Override
-        public void onBegin() {
-
-        }
+        public void onBegin() { }
     };
 
-    PipelineChainImpl(String name, Transformer transformer, List<PipelineChain> chains) {
+    PipelineChainImpl(String name,  List<NodeMoveAware> chains) {
         this.name = name;
-        this.transformer = transformer;
         this.chains = chains;
     }
 
     @Override
     public void output(T out) {
-        for (PipelineChain chain : chains) {
-            transformer.transform(chain, out);
+        for (NodeMoveAware chain : chains) {
+            chain.transfer(out);
         }
     }
 
     @Override
     public void onComplete() {
-        for (PipelineChain chain : chains) {
-            transformer.onComplete(chain);
+        for (NodeMoveAware chain : chains) {
+            chain.onComplete();
         }
     }
 
@@ -59,8 +49,13 @@ public class PipelineChainImpl<T> implements PipelineChain<T> {
 
     @Override
     public void onBegin() {
-        for (PipelineChain chain : chains) {
-            transformer.onBegin(chain);
+        for (NodeMoveAware chain : chains) {
+            chain.onBegin();
         }
+    }
+
+    @Override
+    public List<NodeMoveAware> nodeMoves() {
+        return chains;
     }
 };

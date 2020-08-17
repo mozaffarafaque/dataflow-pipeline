@@ -13,16 +13,22 @@ public class TestSimplestPipelineCreator implements PipelineCreateAware {
     private CustomSink customSinkSquare = new CustomSink("Square");
     private CustomSink customSinkCube = new CustomSink("Cube");
 
+    private ConcurrentTransformerConfig concurrentTransformerConfig;
+
+    public TestSimplestPipelineCreator(ConcurrentTransformerConfig concurrentTransformerConfig) {
+        this.concurrentTransformerConfig = concurrentTransformerConfig;
+    }
+
     @Override
     public Pipeline getPipeline() {
 
       Pipeline pipeline =  Pipeline.create();
 
       PipelineData<Integer> intData1 =  pipeline.fromSource("Source", new Source());
-      PipelineData<Integer> intData = intData1.addTransformer("Dummy Node" , (a,b) -> a.output(b) );
+      PipelineData<Integer> intData = intData1.addTransformer("Dummy Node" , (a,b) -> a.output(b), concurrentTransformerConfig );
 
-      PipelineData<Integer> square = intData.addTransformer("Child Square" , new ChildSquare() );
-      PipelineData<Integer> cube = intData.addTransformer("Child Cube" , new ChildCube() );
+      PipelineData<Integer> square = intData.addTransformer("Child Square" , new ChildSquare(), concurrentTransformerConfig );
+      PipelineData<Integer> cube = intData.addTransformer("Child Cube" , new ChildCube() , concurrentTransformerConfig);
 
       square.sink("Square sink", customSinkSquare);
       cube.sink("Cube sink", customSinkCube);
@@ -81,7 +87,6 @@ class ChildCube implements Transformer<Integer, Integer> {
         chain.output(input * input * input);
         LOG.info("after out completed - " + chain.getName() + ", Processing " + input);
     }
-
 }
 
 class CustomSink implements PipelineSink<Integer> {

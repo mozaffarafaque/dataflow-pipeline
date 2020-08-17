@@ -2,6 +2,7 @@ package com.mozafaq.dataflow.pipeline;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.util.ArrayList;
@@ -115,12 +116,35 @@ public class PipelineTest {
         pipeline.run();
     }
 
-    @Test
-    public void testSimplestPipeline() {
-        TestSimplestPipelineCreator creator = new TestSimplestPipelineCreator();
+    @DataProvider(name = "testSimplestPipeline")
+    public Object[][]  simplestPipelineDataSource() {
+        ConcurrentTransformerConfig concurrentTransformerConfig =
+                new ConcurrentTransformerConfig(
+                        1,
+                        1,
+                        1000,
+                        1000
+                );
+        return new Object[][] {
+                {null},
+               // {concurrentTransformerConfig}
+        };
+    }
+
+
+    @Test(dataProvider = "testSimplestPipeline")
+    public void testSimplestPipeline(ConcurrentTransformerConfig concurrentTransformerConfig) {
+        TestSimplestPipelineCreator creator = new TestSimplestPipelineCreator(concurrentTransformerConfig);
         Pipeline pipeline = creator.getPipeline();
 
         pipeline.run();
+//
+//        try {
+//            Thread.sleep(2000);
+//        } catch (InterruptedException e) {
+//            e.printStackTrace();
+//        }
+
         assertEquals(creator.getCustomSinkCube().getBeginCalledCount(), 1);
         assertEquals(creator.getCustomSinkCube().getEndCalledCount(), 1);
         assertEquals(creator.getCustomSinkCube().getResults(), Arrays.asList(1000, 1331, 1728));
@@ -128,6 +152,7 @@ public class PipelineTest {
         assertEquals(creator.getCustomSinkSquare().getEndCalledCount(), 1);
         assertEquals(creator.getCustomSinkSquare().getResults(), Arrays.asList(100, 121, 144));
 
+       // System.out.println("Finish-----------");
     }
 }
 
@@ -168,7 +193,6 @@ class SumOfOddsSquare implements Transformer<Integer, String> {
 
     @Override
     public void onComplete(PipelineChain chain) {
-
         chain.output(String.valueOf(sum));
         chain.onComplete();
     }
