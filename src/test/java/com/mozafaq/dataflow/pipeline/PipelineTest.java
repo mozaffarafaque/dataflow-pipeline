@@ -127,6 +127,10 @@ public class PipelineTest {
                         .setQueuePollDuration(Duration.ofMillis(1000))
                         .setCountForInsertAttempt(1000)
                         .build();
+
+
+
+
         return new Object[][]{
                 {true, true, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), null},
                 {true, true, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), parallelOperationConfig},

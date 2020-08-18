@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * @author Mozaffar Afaque
  */
-public class PipelineChainImpl<T> implements PipelineChain<T> {
+class PipelineChainImpl<T> implements PipelineChain<T> {
 
     private List<EventTransfer> eventTransfers;
     private String name;
@@ -51,8 +51,7 @@ public class PipelineChainImpl<T> implements PipelineChain<T> {
         }
     }
 
-    @Override
-    public List<EventTransfer> getEventTransfers() {
+    List<EventTransfer> getEventTransfers() {
         return eventTransfers;
     }
 };

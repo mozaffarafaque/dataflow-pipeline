@@ -12,9 +12,9 @@ class IntraThreadEventTransfer<I, O> implements EventTransfer<I, O> {
     private static final Logger LOG = LoggerFactory.getLogger(IntraThreadEventTransfer.class);
 
     final private Transformer<I, O> transformer;
-    final private PipelineChain<O> chain;
+    final private PipelineChainImpl<O> chain;
 
-    public IntraThreadEventTransfer(Transformer<I, O> transformer, PipelineChain<O> chain) {
+    public IntraThreadEventTransfer(Transformer<I, O> transformer, PipelineChainImpl<O> chain) {
         this.transformer = transformer;
         this.chain = chain;
     }
@@ -40,7 +40,7 @@ class IntraThreadEventTransfer<I, O> implements EventTransfer<I, O> {
     }
 
     @Override
-    public PipelineChain<O> chain() {
+    public PipelineChainImpl<O> chain() {
         return chain;
     }
 

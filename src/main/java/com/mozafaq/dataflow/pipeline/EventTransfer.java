@@ -11,6 +11,6 @@ interface EventTransfer<I, O> {
     void onBegin();
     void transfer(I input);
     void onComplete();
-    PipelineChain<O> chain();
+    PipelineChainImpl<O> chain();
     void finish();
 }

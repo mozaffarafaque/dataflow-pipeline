@@ -19,5 +19,4 @@ public interface PipelineChain<T> {
     void onBegin();
     void output(T out);
     void onComplete();
-    List<EventTransfer> getEventTransfers();
 }

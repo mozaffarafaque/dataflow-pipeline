@@ -196,7 +196,7 @@ class ParallelOperationController<I, O> implements Runnable {
         transferBatch(true);
     }
 
-    public void finish(boolean isCompleteCalled) {
+    public void finish() {
         LOG.info("Checking if waiting was not issued at all..");
         if (!waitMonitorBegin.isNotified()) {
             LOG.info("During finish - there was no begin ans no event to process. " +

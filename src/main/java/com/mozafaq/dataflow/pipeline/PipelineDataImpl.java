@@ -8,7 +8,7 @@ import java.util.Objects;
  *
  * @author Mozaffar Afaque
  */
-public class PipelineDataImpl<S> implements PipelineData<S> {
+class PipelineDataImpl<S> implements PipelineData<S> {
 
     private List<PipelineDataImpl> childPipelines;
     final private Transformer transformer;
@@ -17,7 +17,10 @@ public class PipelineDataImpl<S> implements PipelineData<S> {
     private ParallelOperationConfig parallelOperationConfig;
     private String name;
 
-    private PipelineDataImpl(String name, Transformer transformer, PipelineDataImpl parent, ParallelOperationConfig parallelOperationConfig) {
+    private PipelineDataImpl(String name,
+                             Transformer transformer,
+                             PipelineDataImpl parent,
+                             ParallelOperationConfig parallelOperationConfig) {
         this.transformer = transformer;
         this.name = name;
         this.childPipelines = new ArrayList<>();
@@ -33,7 +36,7 @@ public class PipelineDataImpl<S> implements PipelineData<S> {
         this.pipelineChains = pipelineChains;
     }
 
-    public static <T> PipelineDataImpl<T> fromSource(String name, final PipelineSource<T> source) {
+    static <T> PipelineDataImpl<T> fromSource(String name, final PipelineSource<T> source) {
 
         PipelineDataImpl<T> pipelineNodeImpl =
                 new PipelineDataImpl(name, new SourceTransformer(source), null, null);
@@ -64,6 +67,10 @@ public class PipelineDataImpl<S> implements PipelineData<S> {
         childPipelines.add(newData);
     }
 
+    ParallelOperationConfig getParallelOperationConfig() {
+        return parallelOperationConfig;
+    }
+
     Transformer getTransformer() {
         return transformer;
     }
@@ -76,8 +83,4 @@ public class PipelineDataImpl<S> implements PipelineData<S> {
         return name;
     }
 
-    public ParallelOperationConfig getParallelOperationConfig() {
-        return parallelOperationConfig;
-    }
 }
-

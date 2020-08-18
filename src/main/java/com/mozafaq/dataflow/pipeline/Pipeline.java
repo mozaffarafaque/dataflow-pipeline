@@ -6,12 +6,15 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
+ *
+ * The main handler for the user to create the data-flow pipeline, build and execute it.
+ *
  * @author Mozaffar Afaque
  */
 public class Pipeline {
 
     private PipelineDataImpl root;
-    boolean isFrozen = false;
+    private boolean isFrozen = false;
     private Pipeline() {
     }
 
@@ -31,13 +34,13 @@ public class Pipeline {
     private void buildChainRecursive(PipelineDataImpl pipelineNode) {
         if (pipelineNode.getChildPipelines().isEmpty()) {
             // Sink Node
-            PipelineChainImpl chain =
-                    new PipelineChainImpl(
-                            pipelineNode.getName(),
-                            getNodeMoves(pipelineNode.getTransformer(),
-                                    Collections.singletonList(PipelineChainImpl.PIPELINE_CHAIN_SINK),
-                                    pipelineNode.getParallelOperationConfig())
-                    );
+
+            List<EventTransfer> eventTransfers = createEventTransfers(
+                    pipelineNode.getTransformer(),
+                    Collections.singletonList(PipelineChainImpl.PIPELINE_CHAIN_SINK),
+                    pipelineNode.getParallelOperationConfig());
+
+            PipelineChainImpl chain = new PipelineChainImpl(pipelineNode.getName(), eventTransfers);
             pipelineNode.setPipelineChains(Collections.singletonList(chain));
             return;
         }
@@ -50,20 +53,20 @@ public class Pipeline {
         List<PipelineChainImpl> chains = childNodes.stream()
                 .map(node -> new PipelineChainImpl(
                         node.getName(),
-                        getNodeMoves(node.getTransformer(), node.getPipelineChains(), node.getParallelOperationConfig())
+                        createEventTransfers(node.getTransformer(), node.getPipelineChains(), node.getParallelOperationConfig())
                     ))
                 .collect(Collectors.toUnmodifiableList());
 
         pipelineNode.setPipelineChains(chains);
     }
 
-    private List<EventTransfer> getNodeMoves(Transformer transformer, List<PipelineChainImpl> chains, ParallelOperationConfig parallelOperationConfig) {
+    private List<EventTransfer> createEventTransfers(Transformer transformer, List<PipelineChainImpl> chains, ParallelOperationConfig parallelOperationConfig) {
         return chains.stream()
-                .map(chain -> getNodeMoveAware(transformer, chain, parallelOperationConfig))
+                .map(chain -> createEventTransfer(transformer, chain, parallelOperationConfig))
                 .collect(Collectors.toUnmodifiableList());
     }
 
-    private EventTransfer getNodeMoveAware(Transformer transformer, PipelineChainImpl chain, ParallelOperationConfig parallelOperationConfig) {
+    private EventTransfer createEventTransfer(Transformer transformer, PipelineChainImpl chain, ParallelOperationConfig parallelOperationConfig) {
 
         if (parallelOperationConfig == null) {
             return new IntraThreadEventTransfer(transformer, chain);
@@ -72,24 +75,26 @@ public class Pipeline {
         }
     }
 
-    private void initNodeMoves(PipelineChain pipelineChain, final boolean isStart) {
-        if (pipelineChain.getEventTransfers().isEmpty()) {
+    private void initEventTransfers(PipelineChainImpl pipelineChain, final boolean isStart) {
+
+        List<EventTransfer> eventTransfers = pipelineChain.getEventTransfers();
+
+        if (eventTransfers.isEmpty()) {
             // Sink Node
             return;
         }
-        List<EventTransfer> childNodeMoves = pipelineChain.getEventTransfers();
 
-        for (EventTransfer move : childNodeMoves) {
+        for (EventTransfer transfer : eventTransfers) {
             if (isStart) {
-                move.init();
+                transfer.init();
             } else {
-                move.finish();
+                transfer.finish();
             }
         }
-        for (EventTransfer move : childNodeMoves) {
-            initNodeMoves(move.chain(), isStart);
-        }
 
+        for (EventTransfer transfer : eventTransfers) {
+            initEventTransfers(transfer.chain(), isStart);
+        }
     }
 
     public synchronized void build() {
@@ -112,7 +117,7 @@ public class Pipeline {
         List<PipelineChainImpl> chains = root.getPipelineChains();
 
         for (PipelineChainImpl chain: chains) {
-            initNodeMoves(chain, true);
+            initEventTransfers(chain, true);
         }
 
         Transformer transformer = root.getTransformer();
@@ -121,7 +126,7 @@ public class Pipeline {
         }
 
         for (PipelineChainImpl chain: chains) {
-            initNodeMoves(chain, false);
+            initEventTransfers(chain, false);
         }
     }
 }

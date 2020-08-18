@@ -6,7 +6,7 @@ package com.mozafaq.dataflow.pipeline;
  * can very well consumes multiple events and give only one
  * event as output.
  *
- * Alos, one an have multiple transformer in the data-flow pipeline.
+ * Also, one an have multiple transformer in the data-flow pipeline.
  *
  * @author Mozaffar Afaque
  *

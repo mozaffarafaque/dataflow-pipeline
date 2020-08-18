@@ -13,10 +13,10 @@ class InterThreadEventTransfer<I, O> implements EventTransfer<I, O> {
 
     final private ParallelOperationConfig parallelOperationConfig;
     final private Transformer<I, O> transformer;
-    final private PipelineChain<O> chain;
+    final private PipelineChainImpl<O> chain;
     private ParallelOperationController parallelOperationController;
 
-    public InterThreadEventTransfer(Transformer<I, O> transformer, PipelineChain<O> chain, ParallelOperationConfig parallelOperationConfig) {
+    public InterThreadEventTransfer(Transformer<I, O> transformer, PipelineChainImpl<O> chain, ParallelOperationConfig parallelOperationConfig) {
         this.transformer = transformer;
         this.chain = chain;
         this.parallelOperationConfig = parallelOperationConfig;
@@ -50,13 +50,13 @@ class InterThreadEventTransfer<I, O> implements EventTransfer<I, O> {
     }
 
     @Override
-    public PipelineChain<O> chain() {
+    public PipelineChainImpl<O> chain() {
         return chain;
     }
 
     @Override
     public void finish() {
-        parallelOperationController.finish(false);
+        parallelOperationController.finish();
 
     }
 }
