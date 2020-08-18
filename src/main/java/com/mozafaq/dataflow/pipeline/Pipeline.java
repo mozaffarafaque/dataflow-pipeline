@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
  */
 public class Pipeline {
 
-    private PipelineDataImpl root;
+    private PipelineStateImpl root;
     private boolean isFrozen = false;
     private Pipeline() {
     }
@@ -22,17 +22,17 @@ public class Pipeline {
         return new Pipeline();
     }
 
-    public <T> PipelineData<T> fromSource(String name, PipelineSource<T> source) {
+    public <T> PipelineState<T> fromSource(String name, PipelineSource<T> source) {
         Objects.requireNonNull(source);
         if (root != null) {
             throw new IllegalStateException("Source already set!");
         }
-        root = PipelineDataImpl.fromSource(name, source);
+        root = PipelineStateImpl.fromSource(name, source);
         return root;
     }
 
-    private void buildChainRecursive(PipelineDataImpl pipelineNode) {
-        if (pipelineNode.getChildPipelines().isEmpty()) {
+    private void buildChainRecursive(PipelineStateImpl pipelineNode) {
+        if (pipelineNode.getChildPipelineStates().isEmpty()) {
             // Sink Node
 
             List<EventTransfer> eventTransfers = createEventTransfers(
@@ -45,8 +45,8 @@ public class Pipeline {
             return;
         }
 
-        List<PipelineDataImpl> childNodes = pipelineNode.getChildPipelines();
-        for (PipelineDataImpl node : childNodes) {
+        List<PipelineStateImpl> childNodes = pipelineNode.getChildPipelineStates();
+        for (PipelineStateImpl node : childNodes) {
             buildChainRecursive(node);
         }
 

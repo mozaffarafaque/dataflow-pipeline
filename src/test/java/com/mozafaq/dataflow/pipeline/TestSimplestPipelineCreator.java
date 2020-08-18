@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * @author Mozaffar Afaque
@@ -24,18 +25,37 @@ public class TestSimplestPipelineCreator implements PipelineCreateAware {
     @Override
     public Pipeline getPipeline() {
 
-      Pipeline pipeline =  Pipeline.create();
+        Pipeline pipeline = Pipeline.create();
 
-      PipelineData<Integer> intData1 =  pipeline.fromSource("Source", source);
-      PipelineData<Integer> intData = intData1.addTransformer("Dummy Node" , (a,b) -> a.output(b), parallelOperationConfig);
+        PipelineState<Integer> intEventsFromSource = pipeline.fromSource("Source", source);
+        PipelineState<Integer> identicalEventsAsSource =
+                (parallelOperationConfig != null ?
+                        intEventsFromSource.addParallelTransformer("Identical As Source", (a, b) -> a.output(b), parallelOperationConfig)
+                        : intEventsFromSource.addTransformer("Identical As Source", (a, b) -> a.output(b)));
 
-      PipelineData<Integer> square = intData.addTransformer("Child Square" , new ChildSquare(), parallelOperationConfig);
-      PipelineData<Integer> cube = intData.addTransformer("Child Cube" , new ChildCube() , parallelOperationConfig);
+        PipelineState<Integer> square =
+                (parallelOperationConfig != null ?
+                        identicalEventsAsSource.addParallelTransformer("Child Square", new ChildSquare(), parallelOperationConfig)
+                        : identicalEventsAsSource.addTransformer("Child Square", new ChildSquare()));
 
-      square.sink("Square sink", customSinkSquare);
-      cube.sink("Cube sink", customSinkCube);
-      pipeline.build();
-      return pipeline;
+        PipelineState<Integer> cube =
+                (parallelOperationConfig != null ?
+                        identicalEventsAsSource.addParallelTransformer("Child Cube", new ChildCube(), parallelOperationConfig)
+                        : identicalEventsAsSource.addTransformer("Child Cube", new ChildCube()));
+
+        PipelineState<Integer> identicalSquare =
+                (parallelOperationConfig != null ?
+                        square.addParallelTransformer("Identical As Square", (a, b) -> a.output(b), parallelOperationConfig)
+                        : square.addTransformer("Identical As Square", (a, b) -> a.output(b)));
+        PipelineState<Integer> identicalCube =
+                (parallelOperationConfig != null ?
+                        cube.addParallelTransformer("Identical As Cube", (a, b) -> a.output(b), parallelOperationConfig)
+                        : cube.addTransformer("Identical As Cube", (a, b) -> a.output(b)));
+
+        identicalSquare.sink("Square sink", customSinkSquare);
+        identicalCube.sink("Cube sink", customSinkCube);
+        pipeline.build();
+        return pipeline;
     }
 
     public CustomSink getCustomSinkSquare() {

@@ -4,6 +4,8 @@ import java.time.Duration;
 import java.util.Objects;
 
 /**
+ * Configuration class for the parallel execution of the events
+ * in the transformer.
  *
  * @author Mozaffar Afaque
  */
@@ -69,9 +71,21 @@ public class ParallelOperationConfig {
                     parallelOperationConfig.queueBufferSize < 1 ||
                     parallelOperationConfig.eventBatchSize < 1 ||
                     parallelOperationConfig.countForInsertAttempt < 1) {
-                throw  new IllegalArgumentException("Queue size, batch size, poll duration, attemp count must be more than 0!");
+                throw new IllegalArgumentException("Queue size, batch size, poll duration, attemp count must be more than 0!");
             }
-            return parallelOperationConfig;
+            ParallelOperationConfig  parallelOperationConfigTemp = parallelOperationConfig;
+            parallelOperationConfig = null;
+            return parallelOperationConfigTemp;
         }
+    }
+
+    @Override
+    public String toString() {
+        return "ParallelOperationConfig{" +
+                "queueBufferSize=" + queueBufferSize +
+                ", eventBatchSize=" + eventBatchSize +
+                ", queuePollDuration=" + queuePollDuration +
+                ", countForInsertAttempt=" + countForInsertAttempt +
+                '}';
     }
 }

@@ -51,17 +51,17 @@ public class PipelineTest {
                                     List<Integer> valueSinkEvenInt) {
 
         Pipeline pipeline = Pipeline.create();
-        PipelineData<Integer> dataInts = pipeline.fromSource("Source", new CustomSource());
-        PipelineData<Integer> dataIntThrice = dataInts.addTransformer("IntegerThrice", (a, b) -> a.output(3 * b));
-        PipelineData<Integer> dataIntSquares = dataIntThrice.addTransformer("IntegerSquare", (a, b) -> a.output(b * b));
-        PipelineData<Integer> dataSquareEvents = dataIntSquares.addTransformer("IntSquareEven", (a, b) ->
+        PipelineState<Integer> dataInts = pipeline.fromSource("Source", new CustomSource());
+        PipelineState<Integer> dataIntThrice = dataInts.addTransformer("IntegerThrice", (a, b) -> a.output(3 * b));
+        PipelineState<Integer> dataIntSquares = dataIntThrice.addTransformer("IntegerSquare", (a, b) -> a.output(b * b));
+        PipelineState<Integer> dataSquareEvents = dataIntSquares.addTransformer("IntSquareEven", (a, b) ->
         {
             if (b % 2 == 0) {
                 a.output(b);
             }
         });
 
-        PipelineData<Integer> dataSquareOdds = dataIntSquares.addTransformer("IntSquareOdd", (a, b) ->
+        PipelineState<Integer> dataSquareOdds = dataIntSquares.addTransformer("IntSquareOdd", (a, b) ->
         {
             if (b % 2 == 1) {
                 a.output(b);
@@ -69,10 +69,10 @@ public class PipelineTest {
         });
 
 
-        PipelineData<String> dataSquareEvenStr =
+        PipelineState<String> dataSquareEvenStr =
                 dataSquareEvents.addTransformer("SquareEvenString", (a, b) -> a.output(String.valueOf(b)));
 
-        PipelineData<String> dataSquareOddsStr =
+        PipelineState<String> dataSquareOddsStr =
                 dataSquareOdds.addTransformer("SumOfOddsSquare", new SumOfOddsSquare());
 
         dataSquareEvenStr.sink("SinkEvenStr", a -> valueSinkEvens.add(a));
@@ -111,6 +111,15 @@ public class PipelineTest {
         pipeline.fromSource(null, null);
     }
 
+    @Test(expectedExceptions = {NullPointerException.class})
+    public void testExceptionNullParallelConfig() {
+        Pipeline pipeline = Pipeline.create();
+        PipelineState<Integer> source =
+                pipeline.fromSource("Test1" , a -> a.output(100));
+        source.addParallelTransformer("NullConfig", (a, b) -> a.output(b), null);
+    }
+
+
     @Test(expectedExceptions = {IllegalArgumentException.class})
     public void testExceptionWithoutCreation() {
         Pipeline pipeline = Pipeline.create();
@@ -128,43 +137,37 @@ public class PipelineTest {
                         .setCountForInsertAttempt(1000)
                         .build();
 
-
-
-
         return new Object[][]{
-                {true, true, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), null},
-                {true, true, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), parallelOperationConfig},
+                {true, true, Arrays.asList(10, 11, 12), null},
+                {true, true, Arrays.asList(10, 11, 12), parallelOperationConfig},
 
-                {false, true, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), null},
-                {false, true, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), parallelOperationConfig},
+                {false, true, Arrays.asList(10, 11, 12), null},
+                {false, true, Arrays.asList(10, 11, 12), parallelOperationConfig},
 
-                {true, false, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), null},
-                {true, false, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), parallelOperationConfig},
+                {true, false, Arrays.asList(10, 11, 12), null},
+                {true, false, Arrays.asList(10, 11, 12), parallelOperationConfig},
 
-                {false, false, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), null},
-                {false, false, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), parallelOperationConfig},
+                {false, false, Arrays.asList(10, 11, 12), null},
+                {false, false, Arrays.asList(10, 11, 12), parallelOperationConfig},
 
-                {true, true, Arrays.asList(), Arrays.asList(), Arrays.asList(), null},
-                {true, true, Arrays.asList(), Arrays.asList(), Arrays.asList(), parallelOperationConfig},
+                {true, true, Arrays.asList(), null},
+                {true, true, Arrays.asList(), parallelOperationConfig},
 
-                {true, false, Arrays.asList(), Arrays.asList(), Arrays.asList(), null},
-                {true, false, Arrays.asList(), Arrays.asList(), Arrays.asList(), parallelOperationConfig},
+                {true, false, Arrays.asList(), null},
+                {true, false, Arrays.asList(), parallelOperationConfig},
 
-                {false, true, Arrays.asList(), Arrays.asList(), Arrays.asList(), null},
-                {false, true, Arrays.asList(), Arrays.asList(), Arrays.asList(), parallelOperationConfig},
+                {false, true, Arrays.asList(), null},
+                {false, true, Arrays.asList(), parallelOperationConfig},
 
-                {false, false, Arrays.asList(), Arrays.asList(), Arrays.asList(), null},
-                {false, false, Arrays.asList(), Arrays.asList(), Arrays.asList(), parallelOperationConfig},
+                {false, false, Arrays.asList(), null},
+                {false, false, Arrays.asList(), parallelOperationConfig},
         };
     }
-
-
+    
     @Test(dataProvider = "testSimplestPipeline")
     public void testSimplestPipeline(boolean isBeginEvent,
                                      boolean isEndEvent,
                                      List<Integer> events,
-                                     List<Integer> resultCube,
-                                     List<Integer> resultSquare,
                                      ParallelOperationConfig parallelOperationConfig) {
 
         Source source = new Source(isBeginEvent, isEndEvent, events);
@@ -172,18 +175,22 @@ public class PipelineTest {
         TestSimplestPipelineCreator creator = new TestSimplestPipelineCreator(parallelOperationConfig, source);
         Pipeline pipeline = creator.getPipeline();
         pipeline.run();
+
+        List<Integer> resultCube = events.stream().map(e -> e * e * e).collect(Collectors.toUnmodifiableList());
+        List<Integer> resultSquare = events.stream().map(e -> e * e).collect(Collectors.toUnmodifiableList());
+
         assertEquals(creator.getCustomSinkCube().getBeginCalledCount(), isBeginEvent ? 1 : 0);
         assertEquals(creator.getCustomSinkCube().getEndCalledCount(), isEndEvent ? 1 : 0);
         assertEquals(creator.getCustomSinkCube().getResults(), resultCube);
         assertEquals(creator.getCustomSinkSquare().getBeginCalledCount(), isBeginEvent ? 1 : 0);
         assertEquals(creator.getCustomSinkSquare().getEndCalledCount(), isEndEvent ? 1 : 0);
         assertEquals(creator.getCustomSinkSquare().getResults(), resultSquare);
-
     }
 }
 
 class CustomSource implements PipelineSource<Integer> {
-   static final List<Integer> INPUT = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9,
+
+    static final List<Integer> INPUT = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9,
             10, 11, 12, 13, 14 ,15 ,16 ,17, 18, 19, 20);
 
     @Override
