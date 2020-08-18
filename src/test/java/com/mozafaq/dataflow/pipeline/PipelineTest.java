@@ -31,15 +31,15 @@ public class PipelineTest {
         assertEquals(valueSinkEvenInts,
                 CustomSource.INPUT
                         .stream()
-                        .map(a -> 9*a*a )
-                        .filter(a -> a%2 == 0)
+                        .map(a -> 9 * a * a )
+                        .filter(a -> a % 2 == 0)
                         .collect(Collectors.toUnmodifiableList()));
 
         assertEquals(valueSinkEvens,
                 CustomSource.INPUT
                         .stream()
-                        .map(a -> 9*a*a)
-                        .filter(a -> a%2 == 0)
+                        .map(a -> 9 * a * a)
+                        .filter(a -> a % 2 == 0)
                         .map(a -> String.valueOf(a))
                         .collect(Collectors.toUnmodifiableList())
         );
@@ -134,7 +134,7 @@ public class PipelineTest {
                         .setEventBatchSize(1)
                         .setQueueBufferSize(1)
                         .setQueuePollDuration(Duration.ofMillis(1000))
-                        .setCountForInsertAttempt(1000)
+                        .setCountForInsertAttempt(10)
                         .build();
 
         return new Object[][]{
@@ -163,14 +163,14 @@ public class PipelineTest {
                 {false, false, Arrays.asList(), parallelOperationConfig},
         };
     }
-    
+
     @Test(dataProvider = "testSimplestPipeline")
     public void testSimplestPipeline(boolean isBeginEvent,
-                                     boolean isEndEvent,
+                                     boolean isCompleteEvent,
                                      List<Integer> events,
                                      ParallelOperationConfig parallelOperationConfig) {
 
-        Source source = new Source(isBeginEvent, isEndEvent, events);
+        Source source = new Source(isBeginEvent, isCompleteEvent, events);
 
         TestSimplestPipelineCreator creator = new TestSimplestPipelineCreator(parallelOperationConfig, source);
         Pipeline pipeline = creator.getPipeline();
@@ -180,10 +180,10 @@ public class PipelineTest {
         List<Integer> resultSquare = events.stream().map(e -> e * e).collect(Collectors.toUnmodifiableList());
 
         assertEquals(creator.getCustomSinkCube().getBeginCalledCount(), isBeginEvent ? 1 : 0);
-        assertEquals(creator.getCustomSinkCube().getEndCalledCount(), isEndEvent ? 1 : 0);
+        assertEquals(creator.getCustomSinkCube().getEndCalledCount(), isCompleteEvent ? 1 : 0);
         assertEquals(creator.getCustomSinkCube().getResults(), resultCube);
         assertEquals(creator.getCustomSinkSquare().getBeginCalledCount(), isBeginEvent ? 1 : 0);
-        assertEquals(creator.getCustomSinkSquare().getEndCalledCount(), isEndEvent ? 1 : 0);
+        assertEquals(creator.getCustomSinkSquare().getEndCalledCount(), isCompleteEvent ? 1 : 0);
         assertEquals(creator.getCustomSinkSquare().getResults(), resultSquare);
     }
 }

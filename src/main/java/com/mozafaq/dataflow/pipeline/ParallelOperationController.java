@@ -84,7 +84,7 @@ class ParallelOperationController<I, O> implements Runnable {
                 if (records == null) {
                     continue;
                 }
-                for (I record: records ) {
+                for (I record : records ) {
                     transformer.transform(chain, record);
                 }
                 recordOut += records.size();
@@ -106,7 +106,7 @@ class ParallelOperationController<I, O> implements Runnable {
 
     public void init() {
 
-        LOG.info("Starting the concurrent");
+        LOG.info(chain.getName() + "-Initializing the concurrent controller.");
         arrayBlockingQueue = new ArrayBlockingQueue<>(parallelOperationConfig.getQueueBufferSize());
         runningThread = new Thread(this);
         runningThread.setName(Thread.currentThread().getName() + "-child-" + chain.getName());
@@ -120,7 +120,7 @@ class ParallelOperationController<I, O> implements Runnable {
         }
 
         runningThread.start();
-        LOG.info("Started the thread");
+        LOG.info(chain.getName() + "-Completed the concurrent controller.");
     }
 
     public void transfer(I input) {
@@ -197,9 +197,9 @@ class ParallelOperationController<I, O> implements Runnable {
     }
 
     public void finish() {
-        LOG.info("Checking if waiting was not issued at all..");
+        LOG.info(chain.getName() + "-Checking if waiting was not issued at all..");
         if (!waitMonitorBegin.isNotified()) {
-            LOG.info("During finish - there was no begin ans no event to process. " +
+            LOG.info(chain.getName() + " -During finish - there was no begin ans no event to process. " +
                     "Calling is begin for process to flow");
 
             // In case of there is not explicit begin call and there is no
@@ -208,16 +208,16 @@ class ParallelOperationController<I, O> implements Runnable {
             onBegin(false);
         }
 
-        LOG.info("Transferring the remaining data if any..");
+        LOG.info(chain.getName() + "-Transferring the remaining data if any..");
 
         transferBatch(false);
 
-        LOG.info("Transferring empty batch for finish execution");
+        LOG.info(chain.getName() + "-Transferring empty batch for finish execution");
 
         transferBatch(true);
 
         try {
-            LOG.info("Acquiring two subsequent execution....");
+            LOG.info(chain.getName() + "-Acquiring subsequent execution....");
             finishSemaphore.acquire();
         } catch (InterruptedException e) {
             throw new IllegalStateException(e);

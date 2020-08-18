@@ -11,6 +11,7 @@ import java.util.Optional;
  * @author Mozaffar Afaque
  */
 public class TestSimplestPipelineCreator implements PipelineCreateAware {
+
     private CustomSink customSinkSquare = new CustomSink("Square");
     private CustomSink customSinkCube = new CustomSink("Cube");
     private Source source;
@@ -22,16 +23,40 @@ public class TestSimplestPipelineCreator implements PipelineCreateAware {
         this.source = source;
     }
 
+    static class IdentityTransformer implements Transformer<Integer, Integer> {
+        private static final Logger LOG = LoggerFactory.getLogger(IdentityTransformer.class);
+
+        final private long delayBeforeOutputMillis;
+        final private long delayAfterOutputMillis;
+
+        public IdentityTransformer(long delayBeforeOutputMillis, long delayAfterOutputMillis) {
+            this.delayBeforeOutputMillis = Math.max(1l, delayBeforeOutputMillis);
+            this.delayAfterOutputMillis = Math.max(1l, delayAfterOutputMillis);
+        }
+        @Override
+        public void transform(PipelineChain<Integer> chain, Integer input) {
+            try {
+                Thread.sleep(delayBeforeOutputMillis);
+                LOG.info("Output from identity transformer - " + input);
+                chain.output(input);
+                Thread.sleep(delayAfterOutputMillis);
+            } catch (InterruptedException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
     @Override
     public Pipeline getPipeline() {
 
         Pipeline pipeline = Pipeline.create();
-
         PipelineState<Integer> intEventsFromSource = pipeline.fromSource("Source", source);
-        PipelineState<Integer> identicalEventsAsSource =
+        IdentityTransformer identityTransformer = new IdentityTransformer(1,1);
+
+        PipelineState<Integer> identicalEventsAsSource = // intEventsFromSource.addTransformer("Identical As Source", identityTransformer);
                 (parallelOperationConfig != null ?
-                        intEventsFromSource.addParallelTransformer("Identical As Source", (a, b) -> a.output(b), parallelOperationConfig)
-                        : intEventsFromSource.addTransformer("Identical As Source", (a, b) -> a.output(b)));
+                        intEventsFromSource.addParallelTransformer("Identical As Source", identityTransformer, parallelOperationConfig)
+                        : intEventsFromSource.addTransformer("Identical As Source", identityTransformer));
 
         PipelineState<Integer> square =
                 (parallelOperationConfig != null ?
@@ -45,12 +70,12 @@ public class TestSimplestPipelineCreator implements PipelineCreateAware {
 
         PipelineState<Integer> identicalSquare =
                 (parallelOperationConfig != null ?
-                        square.addParallelTransformer("Identical As Square", (a, b) -> a.output(b), parallelOperationConfig)
-                        : square.addTransformer("Identical As Square", (a, b) -> a.output(b)));
+                        square.addParallelTransformer("Identical As Square", identityTransformer, parallelOperationConfig)
+                        : square.addTransformer("Identical As Square", identityTransformer));
         PipelineState<Integer> identicalCube =
                 (parallelOperationConfig != null ?
-                        cube.addParallelTransformer("Identical As Cube", (a, b) -> a.output(b), parallelOperationConfig)
-                        : cube.addTransformer("Identical As Cube", (a, b) -> a.output(b)));
+                        cube.addParallelTransformer("Identical As Cube", identityTransformer, parallelOperationConfig)
+                        : cube.addTransformer("Identical As Cube", identityTransformer));
 
         identicalSquare.sink("Square sink", customSinkSquare);
         identicalCube.sink("Cube sink", customSinkCube);

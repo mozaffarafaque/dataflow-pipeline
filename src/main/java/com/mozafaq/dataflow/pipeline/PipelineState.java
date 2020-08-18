@@ -19,7 +19,7 @@ public interface PipelineState<T> {
     /**
      * Adds the transformer in the pipeline flow.
      *
-     * @param name  Name of the transformer. This is just for user to provider
+     * @param name Name of the transformer. This is just for user to provider
      *             ability to identify node and giving some name.
      *
      * @param transformer that will be applied on the current state. This transfer can
@@ -29,8 +29,7 @@ public interface PipelineState<T> {
      *
      * @return New state.
      */
-    <O> PipelineState<O> addTransformer(String name,
-                                        Transformer<T, O> transformer);
+    <O> PipelineState<O> addTransformer(String name, Transformer<T, O> transformer);
 
     /**
      *

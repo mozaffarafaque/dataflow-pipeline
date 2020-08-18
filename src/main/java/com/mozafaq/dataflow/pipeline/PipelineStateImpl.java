@@ -10,43 +10,47 @@ import java.util.Objects;
  */
 class PipelineStateImpl<S> implements PipelineState<S> {
 
+    // Tree information
+    final private PipelineStateImpl parentState;
     final private List<PipelineStateImpl> childPipelineStates;
-    final private Transformer transformer;
-    final private PipelineStateImpl parent;
-    final private ParallelOperationConfig parallelOperationConfig;
-    final private String name;
 
-    private List<PipelineChainImpl> pipelineChains;
+    // Transformer used for reaching to this state.
+    final private Transformer transformer;
+
+    // Metadata associated with this state
+    final private String name;
+    final private ParallelOperationConfig parallelOperationConfig;
+
+    // Pipeline chains tree information
+    private PipelineChainImpl parentChain;
+    private List<PipelineChainImpl> childPipelineChains;
 
     private PipelineStateImpl(String name,
                               Transformer transformer,
-                              PipelineStateImpl parent,
+                              PipelineStateImpl parentState,
                               ParallelOperationConfig parallelOperationConfig) {
         this.transformer = transformer;
         this.name = name;
         this.childPipelineStates = new ArrayList<>();
-        this.parent = parent;
+        this.parentState = parentState;
         this.parallelOperationConfig = parallelOperationConfig;
     }
 
-    List<PipelineChainImpl> getPipelineChains() {
-        return pipelineChains;
+    List<PipelineChainImpl> getChildPipelineChains() {
+        return childPipelineChains;
     }
 
-    void setPipelineChains(List<PipelineChainImpl> pipelineChains) {
-        this.pipelineChains = pipelineChains;
+    void setChildPipelineChains(List<PipelineChainImpl> childPipelineChains) {
+        this.childPipelineChains = childPipelineChains;
     }
 
     static <T> PipelineStateImpl<T> fromSource(String name, final PipelineSource<T> source) {
-
-        PipelineStateImpl<T> pipelineNodeImpl =
-                new PipelineStateImpl(name, new SourceTransformer(source), null, null);
-        return pipelineNodeImpl;
+        Transformer<?, T> sourceTransformer = new SourceTransformer(source);
+        return new PipelineStateImpl(name, sourceTransformer, null, null);
     }
 
     @Override
-    public <T> PipelineState<T> addTransformer(String name,
-                                               Transformer<S, T> transformer) {
+    public <T> PipelineState<T> addTransformer(String name, Transformer<S, T> transformer) {
         return createPipelineState(name, transformer, null);
     }
 
@@ -55,15 +59,17 @@ class PipelineStateImpl<S> implements PipelineState<S> {
                                                        Transformer<S, T> transformer,
                                                        ParallelOperationConfig parallelOperationConfig) {
 
-        Objects.requireNonNull(parallelOperationConfig, "Parallel Operation Configuration must be non-null");
+        Objects.requireNonNull(parallelOperationConfig,
+                "Parallel operation configuration cannot be null!");
         return createPipelineState(name, transformer, parallelOperationConfig);
     }
 
     private <T> PipelineState<T> createPipelineState(String name,
-                                                    Transformer<S, T> transformer,
-                                                    ParallelOperationConfig parallelOperationConfig) {
+                                                     Transformer<S, T> transformer,
+                                                     ParallelOperationConfig parallelOperationConfig) {
         Objects.requireNonNull(transformer);
-        PipelineStateImpl<T> newState = new PipelineStateImpl(name, transformer,this, parallelOperationConfig);
+        PipelineStateImpl<T> newState =
+                new PipelineStateImpl(name, transformer,this, parallelOperationConfig);
         this.childPipelineStates.add(newState);
         return newState;
     }
@@ -71,9 +77,8 @@ class PipelineStateImpl<S> implements PipelineState<S> {
     @Override
     public void sink(String name, final PipelineSink<S> sink) {
         Objects.requireNonNull(sink);
-        PipelineStateImpl<S> newData =
-                new PipelineStateImpl(name, new SinkTransformer(sink), this,null);
-        childPipelineStates.add(newData);
+        Transformer<S, ?> sinkTransformer = new SinkTransformer(sink);
+        createPipelineState(name, sinkTransformer, null);
     }
 
     ParallelOperationConfig getParallelOperationConfig() {
@@ -90,5 +95,17 @@ class PipelineStateImpl<S> implements PipelineState<S> {
 
     String getName() {
         return name;
+    }
+
+    PipelineStateImpl getParentState() {
+        return parentState;
+    }
+
+    public PipelineChainImpl getParentChain() {
+        return parentChain;
+    }
+
+    public void setParentChain(PipelineChainImpl parentChain) {
+        this.parentChain = parentChain;
     }
 }

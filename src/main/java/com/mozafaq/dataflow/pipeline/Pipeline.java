@@ -7,13 +7,15 @@ import java.util.stream.Collectors;
 
 /**
  *
- * The main handler for the user to create the data-flow pipeline, build and execute it.
+ * The main handler for the user to create the data-flow pipeline, build
+ * and execute it.
  *
  * @author Mozaffar Afaque
  */
 public class Pipeline {
 
-    private PipelineStateImpl root;
+    private PipelineStateImpl rootState;
+    private PipelineChainImpl rootChain;
     private boolean isFrozen = false;
     private Pipeline() {
     }
@@ -22,51 +24,58 @@ public class Pipeline {
         return new Pipeline();
     }
 
-    public <T> PipelineState<T> fromSource(String name, PipelineSource<T> source) {
+    public synchronized  <T> PipelineState<T>  fromSource(String name, PipelineSource<T> source) {
         Objects.requireNonNull(source);
-        if (root != null) {
+        if (rootState != null) {
             throw new IllegalStateException("Source already set!");
         }
-        root = PipelineStateImpl.fromSource(name, source);
-        return root;
+        rootState = PipelineStateImpl.fromSource(name, source);
+        return rootState;
     }
 
-    private void buildChainRecursive(PipelineStateImpl pipelineNode) {
-        if (pipelineNode.getChildPipelineStates().isEmpty()) {
+    private void buildChainRecursive(PipelineStateImpl pipelineState) {
+        if (pipelineState.getChildPipelineStates().isEmpty()) {
             // Sink Node
 
             List<EventTransfer> eventTransfers = createEventTransfers(
-                    pipelineNode.getTransformer(),
+                    pipelineState.getTransformer(),
                     Collections.singletonList(PipelineChainImpl.PIPELINE_CHAIN_SINK),
-                    pipelineNode.getParallelOperationConfig());
+                    pipelineState.getParallelOperationConfig());
 
-            PipelineChainImpl chain = new PipelineChainImpl(pipelineNode.getName(), eventTransfers);
-            pipelineNode.setPipelineChains(Collections.singletonList(chain));
+            PipelineChainImpl chain = new PipelineChainImpl(pipelineState.getName(), eventTransfers);
+            pipelineState.setChildPipelineChains(Collections.singletonList(chain));
             return;
         }
 
-        List<PipelineStateImpl> childNodes = pipelineNode.getChildPipelineStates();
-        for (PipelineStateImpl node : childNodes) {
-            buildChainRecursive(node);
+        List<PipelineStateImpl> childStates = pipelineState.getChildPipelineStates();
+        for (PipelineStateImpl childState : childStates) {
+            buildChainRecursive(childState);
         }
 
-        List<PipelineChainImpl> chains = childNodes.stream()
-                .map(node -> new PipelineChainImpl(
-                        node.getName(),
-                        createEventTransfers(node.getTransformer(), node.getPipelineChains(), node.getParallelOperationConfig())
+        List<PipelineChainImpl> childChains = childStates.stream()
+                .map(state -> new PipelineChainImpl(
+                        state.getName(),
+                        createEventTransfers(
+                                state.getTransformer(),
+                                state.getChildPipelineChains(),
+                                state.getParallelOperationConfig())
                     ))
                 .collect(Collectors.toUnmodifiableList());
 
-        pipelineNode.setPipelineChains(chains);
+        pipelineState.setChildPipelineChains(childChains);
     }
 
-    private List<EventTransfer> createEventTransfers(Transformer transformer, List<PipelineChainImpl> chains, ParallelOperationConfig parallelOperationConfig) {
+    private List<EventTransfer> createEventTransfers(Transformer transformer,
+                                                     List<PipelineChainImpl> chains,
+                                                     ParallelOperationConfig parallelOperationConfig) {
         return chains.stream()
                 .map(chain -> createEventTransfer(transformer, chain, parallelOperationConfig))
                 .collect(Collectors.toUnmodifiableList());
     }
 
-    private EventTransfer createEventTransfer(Transformer transformer, PipelineChainImpl chain, ParallelOperationConfig parallelOperationConfig) {
+    private EventTransfer createEventTransfer(Transformer transformer,
+                                              PipelineChainImpl chain,
+                                              ParallelOperationConfig parallelOperationConfig) {
 
         if (parallelOperationConfig == null) {
             return new IntraThreadEventTransfer(transformer, chain);
@@ -98,13 +107,13 @@ public class Pipeline {
     }
 
     public synchronized void build() {
-        Objects.requireNonNull(root);
+        Objects.requireNonNull(rootState);
 
         if (isFrozen) {
             throw new IllegalStateException("It is already built. " +
                     "Cannot perform build operation again.");
         }
-        buildChainRecursive(root);
+        buildChainRecursive(rootState);
         isFrozen = true;
     }
 
@@ -114,14 +123,14 @@ public class Pipeline {
             throw new IllegalArgumentException("You cannot run without pipeline build!");
         }
 
-        List<PipelineChainImpl> chains = root.getPipelineChains();
+        List<PipelineChainImpl> chains = rootState.getChildPipelineChains();
 
         for (PipelineChainImpl chain: chains) {
             initEventTransfers(chain, true);
         }
 
-        Transformer transformer = root.getTransformer();
-        for (PipelineChainImpl chain: chains) {
+        Transformer transformer = rootState.getTransformer();
+        for (PipelineChainImpl chain : chains) {
             transformer.transform(chain, null);
         }
 

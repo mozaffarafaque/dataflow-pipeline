@@ -57,6 +57,5 @@ class InterThreadEventTransfer<I, O> implements EventTransfer<I, O> {
     @Override
     public void finish() {
         parallelOperationController.finish();
-
     }
 }
