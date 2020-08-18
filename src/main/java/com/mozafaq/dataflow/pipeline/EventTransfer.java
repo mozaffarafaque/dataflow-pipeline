@@ -1,6 +1,11 @@
 package com.mozafaq.dataflow.pipeline;
 
-public interface NodeMoveAware<I, O> {
+
+/**
+ *
+ * @author Mozaffar Afaque
+ */
+interface EventTransfer<I, O> {
 
     void init();
     void onBegin();

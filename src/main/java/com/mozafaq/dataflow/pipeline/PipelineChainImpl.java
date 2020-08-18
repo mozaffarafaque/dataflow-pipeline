@@ -1,8 +1,5 @@
 package com.mozafaq.dataflow.pipeline;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Collections;
 import java.util.List;
 
@@ -11,7 +8,7 @@ import java.util.List;
  */
 public class PipelineChainImpl<T> implements PipelineChain<T> {
 
-    private List<NodeMoveAware> chains;
+    private List<EventTransfer> eventTransfers;
     private String name;
 
     public static final PipelineChainImpl PIPELINE_CHAIN_SINK = new PipelineChainImpl("<Sink>", Collections.emptyList()) {
@@ -23,22 +20,22 @@ public class PipelineChainImpl<T> implements PipelineChain<T> {
         public void onBegin() { }
     };
 
-    PipelineChainImpl(String name,  List<NodeMoveAware> chains) {
+    PipelineChainImpl(String name, List<EventTransfer> eventTransfers) {
         this.name = name;
-        this.chains = chains;
+        this.eventTransfers = eventTransfers;
     }
 
     @Override
     public void output(T out) {
-        for (NodeMoveAware chain : chains) {
-            chain.transfer(out);
+        for (EventTransfer transfer : eventTransfers) {
+            transfer.transfer(out);
         }
     }
 
     @Override
     public void onComplete() {
-        for (NodeMoveAware chain : chains) {
-            chain.onComplete();
+        for (EventTransfer transfer : eventTransfers) {
+            transfer.onComplete();
         }
     }
 
@@ -49,13 +46,13 @@ public class PipelineChainImpl<T> implements PipelineChain<T> {
 
     @Override
     public void onBegin() {
-        for (NodeMoveAware chain : chains) {
+        for (EventTransfer chain : eventTransfers) {
             chain.onBegin();
         }
     }
 
     @Override
-    public List<NodeMoveAware> nodeMoves() {
-        return chains;
+    public List<EventTransfer> getEventTransfers() {
+        return eventTransfers;
     }
 };

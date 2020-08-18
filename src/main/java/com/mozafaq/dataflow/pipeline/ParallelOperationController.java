@@ -6,12 +6,20 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 
-public class ConcurrentTransformationSource<I, O> implements Runnable {
+/**
+ * @author Mozaffar Afaque
+ *
+ * @param <I> Input type.
+ * @param <O> Output type.
+ */
 
-    private static final Logger LOG = LoggerFactory.getLogger(ConcurrentTransformationSource.class);
+class ParallelOperationController<I, O> implements Runnable {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ParallelOperationController.class);
 
     // For handling the data transfer and possible exceptions.
     private ArrayBlockingQueue<List<I>> arrayBlockingQueue;
@@ -21,7 +29,7 @@ public class ConcurrentTransformationSource<I, O> implements Runnable {
     // Data pipeline related ones
     final private Transformer<I, O> transformer;
     final private PipelineChain<O> chain;
-    final private ConcurrentTransformerConfig concurrentTransformerConfig;
+    final private ParallelOperationConfig parallelOperationConfig;
 
     private List<I> eventBatch;
 
@@ -29,28 +37,33 @@ public class ConcurrentTransformationSource<I, O> implements Runnable {
     private boolean isStarted;
     private boolean operationCompleted;
     private long recordOut;
-    private long recordIn;
     private long recordInCounter;
+
+    final private Semaphore finishSemaphore;
+    final private Semaphore beginSemaphore;
+
 
     // Monitors
     private final WaitMonitor waitMonitorBegin;
     private final WaitMonitor waitMonitorComplete;
 
-    public ConcurrentTransformationSource(Transformer<I, O> transformer, PipelineChain<O> chain, ConcurrentTransformerConfig concurrentTransformerConfig) {
+    public ParallelOperationController(Transformer<I, O> transformer, PipelineChain<O> chain, ParallelOperationConfig parallelOperationConfig) {
         this.transformer = transformer;
         this.chain = chain;
-        this.concurrentTransformerConfig = concurrentTransformerConfig;
+        this.parallelOperationConfig = parallelOperationConfig;
 
         this.isStarted = false;
         this.operationCompleted = false;
         this.recordOut = 0;
-        this.recordIn = -1;
         this.recordInCounter = 0;
 
         this.waitMonitorBegin = new WaitMonitor();
         this.waitMonitorComplete = new WaitMonitor();
 
-        this.eventBatch = new ArrayList<>(concurrentTransformerConfig.getEventBatchSize());
+        this.finishSemaphore = new Semaphore(1);
+        this.beginSemaphore = new Semaphore(1);
+
+        this.eventBatch = new ArrayList<>(parallelOperationConfig.getEventBatchSize());
     }
 
     @Override
@@ -58,14 +71,15 @@ public class ConcurrentTransformationSource<I, O> implements Runnable {
 
         LOG.info("Thread running....");
         isStarted = true;
-        boolean completed = recordIn == recordOut;
+        boolean completed = false;
         try {
             onBeginHandler();
             LOG.info("Begin signal received....");
 
             while (!completed) {
+
                 List<I> records = arrayBlockingQueue.poll(
-                        concurrentTransformerConfig.getQueueFetchPollTimeMillis(), TimeUnit.MILLISECONDS
+                        parallelOperationConfig.getQueuePollDuration().toMillis(), TimeUnit.MILLISECONDS
                 );
                 if (records == null) {
                     continue;
@@ -74,7 +88,7 @@ public class ConcurrentTransformationSource<I, O> implements Runnable {
                     transformer.transform(chain, record);
                 }
                 recordOut += records.size();
-                completed = (recordIn == recordOut) && records.isEmpty();
+                completed = records.isEmpty();
                 records.clear();
             }
             operationCompleted = true;
@@ -93,10 +107,18 @@ public class ConcurrentTransformationSource<I, O> implements Runnable {
     public void init() {
 
         LOG.info("Starting the concurrent");
-        arrayBlockingQueue = new ArrayBlockingQueue<>(concurrentTransformerConfig.getQueueBufferSize());
+        arrayBlockingQueue = new ArrayBlockingQueue<>(parallelOperationConfig.getQueueBufferSize());
         runningThread = new Thread(this);
         runningThread.setName(Thread.currentThread().getName() + "-child-" + chain.getName());
         runningThread.setDaemon(true);
+
+        try {
+            finishSemaphore.acquire();
+            beginSemaphore.acquire();
+        } catch (InterruptedException e) {
+            throw new IllegalStateException(e);
+        }
+
         runningThread.start();
         LOG.info("Started the thread");
     }
@@ -104,21 +126,16 @@ public class ConcurrentTransformationSource<I, O> implements Runnable {
     public void transfer(I input) {
 
         if (recordInCounter == 0) {
-            tryBeginOnRecordArrival();
+            onBegin(false);
         }
 
-        if (eventBatch.size() == concurrentTransformerConfig.getEventBatchSize()) {
+        if (eventBatch.size() == parallelOperationConfig.getEventBatchSize()) {
             transferBatch(false);
-            eventBatch = new ArrayList<>(concurrentTransformerConfig.getEventBatchSize());
+            eventBatch = new ArrayList<>(parallelOperationConfig.getEventBatchSize());
         }
         eventBatch.add(input);
     }
 
-    private void tryBeginOnRecordArrival() {
-        if (!waitMonitorBegin.isNotified()) {
-            onBegin(false);
-        }
-    }
 
     private void transferBatch(boolean spitEmptyList) {
 
@@ -130,9 +147,9 @@ public class ConcurrentTransformationSource<I, O> implements Runnable {
 
         try {
             boolean isOffered;
-            int countAttempt = concurrentTransformerConfig.getCountForInsertAttempt();
+            int countAttempt = parallelOperationConfig.getCountForInsertAttempt();
             do {
-                isOffered = arrayBlockingQueue.offer(eventBatch, concurrentTransformerConfig.getQueueFetchPollTimeMillis(), TimeUnit.MILLISECONDS);
+                isOffered = arrayBlockingQueue.offer(eventBatch, parallelOperationConfig.getQueuePollDuration().toMillis(), TimeUnit.MILLISECONDS);
                 countAttempt--;
             } while (!isOffered && countAttempt > 0);
 
@@ -147,70 +164,63 @@ public class ConcurrentTransformationSource<I, O> implements Runnable {
     }
 
     private void onBeginHandler() throws InterruptedException {
-        synchronized (waitMonitorBegin) {
-            LOG.info("Start handler acquired lock");
-            waitMonitorBegin.wait();
-            if (waitMonitorBegin.isSignalIssued()) {
-                transformer.onBegin(chain);
-            }
-            LOG.info("Start handler finish begin");
+        beginSemaphore.acquire();
+        if (waitMonitorBegin.isSignalIssued()) {
+            transformer.onBegin(chain);
         }
     }
 
-    public void onBegin(boolean isBeingEvent) {
+    public void onBegin(boolean isBeginEvent) {
+        if (isBeginEvent) {
+            waitMonitorBegin.setSignalIssued();
+        }
 
-        synchronized (waitMonitorBegin) {
-            if (!waitMonitorBegin.isNotified()) {
-                LOG.info("Start handler acquired lock.");
-                if (isBeingEvent) {
-                    waitMonitorBegin.setSignalIssued();
-                }
-                waitMonitorBegin.setNotified();
-                waitMonitorBegin.notify();
-                LOG.info("Start handler finish notification.");
-            }
+        if (!waitMonitorBegin.isNotified()) {
+            beginSemaphore.release();
+            waitMonitorBegin.setNotified();
         }
     }
 
-    private void onCompleteHandler() throws InterruptedException {
-        synchronized (waitMonitorComplete) {
-            LOG.info("Start wait.");
-            waitMonitorComplete.wait();
-            if (waitMonitorComplete.isSignalIssued()) {
-                transformer.onComplete(chain);
-            }
-            LOG.info("End wait.");
+    private void onCompleteHandler()  {
+
+        if (waitMonitorComplete.isSignalIssued()) {
+            transformer.onComplete(chain);
         }
+
+        finishSemaphore.release();
     }
 
     public void onComplete() {
-        finish(true);
+        transferBatch(false);
+        waitMonitorComplete.setSignalIssued();
+        transferBatch(true);
     }
 
     public void finish(boolean isCompleteCalled) {
+        LOG.info("Checking if waiting was not issued at all..");
+        if (!waitMonitorBegin.isNotified()) {
+            LOG.info("During finish - there was no begin ans no event to process. " +
+                    "Calling is begin for process to flow");
 
-        if (waitMonitorBegin.isNotified() && !isCompleteCalled) {
             // In case of there is not explicit begin call and there is no
             // event in this then, we should just make sure the start is
             // called to reach at end.
             onBegin(false);
         }
 
+        LOG.info("Transferring the remaining data if any..");
+
         transferBatch(false);
-        this.recordIn = recordInCounter;
 
-        synchronized (waitMonitorComplete) {
-            transferBatch(true);
-            if (!waitMonitorComplete.isNotified()) {
-                LOG.info("Start notification.");
-                if (isCompleteCalled) {
-                    waitMonitorComplete.setSignalIssued();
-                }
-                waitMonitorComplete.setNotified();
-                waitMonitorComplete.notify();
+        LOG.info("Transferring empty batch for finish execution");
 
-                LOG.info("End notification.");
-            }
+        transferBatch(true);
+
+        try {
+            LOG.info("Acquiring two subsequent execution....");
+            finishSemaphore.acquire();
+        } catch (InterruptedException e) {
+            throw new IllegalStateException(e);
         }
     }
 
@@ -230,10 +240,6 @@ public class ConcurrentTransformationSource<I, O> implements Runnable {
         return recordOut;
     }
 
-    public long getRecordIn() {
-        return recordIn;
-    }
-
     public long getRecordInCounter() {
         return recordInCounter;
     }
@@ -246,23 +252,3 @@ public class ConcurrentTransformationSource<I, O> implements Runnable {
     }
 }
 
-class WaitMonitor {
-    private boolean signalIssued = false;
-    private boolean isNotified = false;
-
-    public synchronized boolean isSignalIssued() {
-        return signalIssued;
-    }
-
-    public synchronized void setSignalIssued() {
-        this.signalIssued = true;
-    }
-
-    public synchronized boolean isNotified() {
-        return isNotified;
-    }
-
-    public synchronized void setNotified() {
-        isNotified = true;
-    }
-}

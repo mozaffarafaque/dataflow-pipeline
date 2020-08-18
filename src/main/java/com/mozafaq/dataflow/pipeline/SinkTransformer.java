@@ -7,6 +7,10 @@ class SinkTransformer implements Transformer
 {
     private final PipelineSink pipelineSink;
 
+    public SinkTransformer(PipelineSink pipelineSink) {
+        this.pipelineSink = pipelineSink;
+    }
+
     @Override
     public void onBegin(PipelineChain chain) {
         pipelineSink.onBegin();
@@ -15,10 +19,6 @@ class SinkTransformer implements Transformer
     @Override
     public void onComplete(PipelineChain chain) {
         pipelineSink.onComplete();
-    }
-
-    public SinkTransformer(PipelineSink pipelineSink) {
-        this.pipelineSink = pipelineSink;
     }
 
     @Override

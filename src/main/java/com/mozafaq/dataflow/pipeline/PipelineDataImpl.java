@@ -14,15 +14,15 @@ public class PipelineDataImpl<S> implements PipelineData<S> {
     final private Transformer transformer;
     private PipelineDataImpl parent;
     private List<PipelineChainImpl> pipelineChains;
-    private ConcurrentTransformerConfig concurrentTransformerConfig;
+    private ParallelOperationConfig parallelOperationConfig;
     private String name;
 
-    private PipelineDataImpl(String name, Transformer transformer, PipelineDataImpl parent, ConcurrentTransformerConfig concurrentTransformerConfig) {
+    private PipelineDataImpl(String name, Transformer transformer, PipelineDataImpl parent, ParallelOperationConfig parallelOperationConfig) {
         this.transformer = transformer;
         this.name = name;
         this.childPipelines = new ArrayList<>();
         this.parent = parent;
-        this.concurrentTransformerConfig = concurrentTransformerConfig;
+        this.parallelOperationConfig = parallelOperationConfig;
     }
 
     List<PipelineChainImpl> getPipelineChains() {
@@ -48,10 +48,10 @@ public class PipelineDataImpl<S> implements PipelineData<S> {
     @Override
     public <T> PipelineData<T> addTransformer(String name,
                                               final Transformer<S, T> transformer,
-                                              ConcurrentTransformerConfig concurrentTransformerConfig) {
+                                              ParallelOperationConfig parallelOperationConfig) {
         Objects.requireNonNull(transformer);
 
-        PipelineDataImpl<T> newData = new PipelineDataImpl(name, transformer,this, concurrentTransformerConfig);
+        PipelineDataImpl<T> newData = new PipelineDataImpl(name, transformer,this, parallelOperationConfig);
         this.childPipelines.add(newData);
         return newData;
     }
@@ -76,8 +76,8 @@ public class PipelineDataImpl<S> implements PipelineData<S> {
         return name;
     }
 
-    public ConcurrentTransformerConfig getConcurrentTransformerConfig() {
-        return concurrentTransformerConfig;
+    public ParallelOperationConfig getParallelOperationConfig() {
+        return parallelOperationConfig;
     }
 }
 

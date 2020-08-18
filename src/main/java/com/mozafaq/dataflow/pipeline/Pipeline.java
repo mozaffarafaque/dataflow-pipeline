@@ -36,7 +36,7 @@ public class Pipeline {
                             pipelineNode.getName(),
                             getNodeMoves(pipelineNode.getTransformer(),
                                     Collections.singletonList(PipelineChainImpl.PIPELINE_CHAIN_SINK),
-                                    pipelineNode.getConcurrentTransformerConfig())
+                                    pipelineNode.getParallelOperationConfig())
                     );
             pipelineNode.setPipelineChains(Collections.singletonList(chain));
             return;
@@ -50,44 +50,46 @@ public class Pipeline {
         List<PipelineChainImpl> chains = childNodes.stream()
                 .map(node -> new PipelineChainImpl(
                         node.getName(),
-                        getNodeMoves(node.getTransformer(), node.getPipelineChains(), node.getConcurrentTransformerConfig())
+                        getNodeMoves(node.getTransformer(), node.getPipelineChains(), node.getParallelOperationConfig())
                     ))
                 .collect(Collectors.toUnmodifiableList());
 
         pipelineNode.setPipelineChains(chains);
     }
 
-    private List<NodeMoveAware> getNodeMoves(Transformer transformer, List<PipelineChainImpl> chains, ConcurrentTransformerConfig concurrentTransformerConfig) {
+    private List<EventTransfer> getNodeMoves(Transformer transformer, List<PipelineChainImpl> chains, ParallelOperationConfig parallelOperationConfig) {
         return chains.stream()
-                .map(chain -> getNodeMoveAware(transformer, chain, concurrentTransformerConfig))
+                .map(chain -> getNodeMoveAware(transformer, chain, parallelOperationConfig))
                 .collect(Collectors.toUnmodifiableList());
     }
 
-    private NodeMoveAware getNodeMoveAware(Transformer transformer, PipelineChainImpl chain, ConcurrentTransformerConfig concurrentTransformerConfig) {
+    private EventTransfer getNodeMoveAware(Transformer transformer, PipelineChainImpl chain, ParallelOperationConfig parallelOperationConfig) {
 
-        if (concurrentTransformerConfig == null) {
-            return new IdenticalNodeMove(transformer, chain);
+        if (parallelOperationConfig == null) {
+            return new IntraThreadEventTransfer(transformer, chain);
         } else {
-            return new ConcurrentNodMove(transformer, chain, concurrentTransformerConfig);
+            return new InterThreadEventTransfer(transformer, chain, parallelOperationConfig);
         }
     }
 
-    private void initNodeMoves(PipelineChain pipelineChain, boolean isStart) {
-        if (pipelineChain.nodeMoves().isEmpty()) {
+    private void initNodeMoves(PipelineChain pipelineChain, final boolean isStart) {
+        if (pipelineChain.getEventTransfers().isEmpty()) {
             // Sink Node
             return;
         }
-        List<NodeMoveAware> childNodeMoves = pipelineChain.nodeMoves();
-        for (NodeMoveAware move : childNodeMoves) {
-            initNodeMoves(move.chain(), isStart);
-        }
-        for (NodeMoveAware move : childNodeMoves) {
+        List<EventTransfer> childNodeMoves = pipelineChain.getEventTransfers();
+
+        for (EventTransfer move : childNodeMoves) {
             if (isStart) {
                 move.init();
             } else {
                 move.finish();
             }
         }
+        for (EventTransfer move : childNodeMoves) {
+            initNodeMoves(move.chain(), isStart);
+        }
+
     }
 
     public synchronized void build() {

@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -118,41 +119,62 @@ public class PipelineTest {
 
     @DataProvider(name = "testSimplestPipeline")
     public Object[][]  simplestPipelineDataSource() {
-        ConcurrentTransformerConfig concurrentTransformerConfig =
-                new ConcurrentTransformerConfig(
-                        1,
-                        1,
-                        1000,
-                        1000
-                );
-        return new Object[][] {
-                {null},
-               // {concurrentTransformerConfig}
+
+        ParallelOperationConfig parallelOperationConfig =
+                ParallelOperationConfig.newBuilder()
+                        .setEventBatchSize(1)
+                        .setQueueBufferSize(1)
+                        .setQueuePollDuration(Duration.ofMillis(1000))
+                        .setCountForInsertAttempt(1000)
+                        .build();
+        return new Object[][]{
+                {true, true, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), null},
+                {true, true, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), parallelOperationConfig},
+
+                {false, true, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), null},
+                {false, true, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), parallelOperationConfig},
+
+                {true, false, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), null},
+                {true, false, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), parallelOperationConfig},
+
+                {false, false, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), null},
+                {false, false, Arrays.asList(10, 11, 12), Arrays.asList(1000, 1331, 1728), Arrays.asList(100, 121, 144), parallelOperationConfig},
+
+                {true, true, Arrays.asList(), Arrays.asList(), Arrays.asList(), null},
+                {true, true, Arrays.asList(), Arrays.asList(), Arrays.asList(), parallelOperationConfig},
+
+                {true, false, Arrays.asList(), Arrays.asList(), Arrays.asList(), null},
+                {true, false, Arrays.asList(), Arrays.asList(), Arrays.asList(), parallelOperationConfig},
+
+                {false, true, Arrays.asList(), Arrays.asList(), Arrays.asList(), null},
+                {false, true, Arrays.asList(), Arrays.asList(), Arrays.asList(), parallelOperationConfig},
+
+                {false, false, Arrays.asList(), Arrays.asList(), Arrays.asList(), null},
+                {false, false, Arrays.asList(), Arrays.asList(), Arrays.asList(), parallelOperationConfig},
         };
     }
 
 
     @Test(dataProvider = "testSimplestPipeline")
-    public void testSimplestPipeline(ConcurrentTransformerConfig concurrentTransformerConfig) {
-        TestSimplestPipelineCreator creator = new TestSimplestPipelineCreator(concurrentTransformerConfig);
+    public void testSimplestPipeline(boolean isBeginEvent,
+                                     boolean isEndEvent,
+                                     List<Integer> events,
+                                     List<Integer> resultCube,
+                                     List<Integer> resultSquare,
+                                     ParallelOperationConfig parallelOperationConfig) {
+
+        Source source = new Source(isBeginEvent, isEndEvent, events);
+
+        TestSimplestPipelineCreator creator = new TestSimplestPipelineCreator(parallelOperationConfig, source);
         Pipeline pipeline = creator.getPipeline();
-
         pipeline.run();
-//
-//        try {
-//            Thread.sleep(2000);
-//        } catch (InterruptedException e) {
-//            e.printStackTrace();
-//        }
+        assertEquals(creator.getCustomSinkCube().getBeginCalledCount(), isBeginEvent ? 1 : 0);
+        assertEquals(creator.getCustomSinkCube().getEndCalledCount(), isEndEvent ? 1 : 0);
+        assertEquals(creator.getCustomSinkCube().getResults(), resultCube);
+        assertEquals(creator.getCustomSinkSquare().getBeginCalledCount(), isBeginEvent ? 1 : 0);
+        assertEquals(creator.getCustomSinkSquare().getEndCalledCount(), isEndEvent ? 1 : 0);
+        assertEquals(creator.getCustomSinkSquare().getResults(), resultSquare);
 
-        assertEquals(creator.getCustomSinkCube().getBeginCalledCount(), 1);
-        assertEquals(creator.getCustomSinkCube().getEndCalledCount(), 1);
-        assertEquals(creator.getCustomSinkCube().getResults(), Arrays.asList(1000, 1331, 1728));
-        assertEquals(creator.getCustomSinkSquare().getBeginCalledCount(), 1);
-        assertEquals(creator.getCustomSinkSquare().getEndCalledCount(), 1);
-        assertEquals(creator.getCustomSinkSquare().getResults(), Arrays.asList(100, 121, 144));
-
-       // System.out.println("Finish-----------");
     }
 }
 

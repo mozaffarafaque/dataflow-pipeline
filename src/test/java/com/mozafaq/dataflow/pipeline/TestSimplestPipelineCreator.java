@@ -12,11 +12,13 @@ import java.util.List;
 public class TestSimplestPipelineCreator implements PipelineCreateAware {
     private CustomSink customSinkSquare = new CustomSink("Square");
     private CustomSink customSinkCube = new CustomSink("Cube");
+    private Source source;
 
-    private ConcurrentTransformerConfig concurrentTransformerConfig;
+    private ParallelOperationConfig parallelOperationConfig;
 
-    public TestSimplestPipelineCreator(ConcurrentTransformerConfig concurrentTransformerConfig) {
-        this.concurrentTransformerConfig = concurrentTransformerConfig;
+    public TestSimplestPipelineCreator(ParallelOperationConfig parallelOperationConfig, Source source) {
+        this.parallelOperationConfig = parallelOperationConfig;
+        this.source = source;
     }
 
     @Override
@@ -24,11 +26,11 @@ public class TestSimplestPipelineCreator implements PipelineCreateAware {
 
       Pipeline pipeline =  Pipeline.create();
 
-      PipelineData<Integer> intData1 =  pipeline.fromSource("Source", new Source());
-      PipelineData<Integer> intData = intData1.addTransformer("Dummy Node" , (a,b) -> a.output(b), concurrentTransformerConfig );
+      PipelineData<Integer> intData1 =  pipeline.fromSource("Source", source);
+      PipelineData<Integer> intData = intData1.addTransformer("Dummy Node" , (a,b) -> a.output(b), parallelOperationConfig);
 
-      PipelineData<Integer> square = intData.addTransformer("Child Square" , new ChildSquare(), concurrentTransformerConfig );
-      PipelineData<Integer> cube = intData.addTransformer("Child Cube" , new ChildCube() , concurrentTransformerConfig);
+      PipelineData<Integer> square = intData.addTransformer("Child Square" , new ChildSquare(), parallelOperationConfig);
+      PipelineData<Integer> cube = intData.addTransformer("Child Cube" , new ChildCube() , parallelOperationConfig);
 
       square.sink("Square sink", customSinkSquare);
       cube.sink("Cube sink", customSinkCube);
@@ -50,18 +52,33 @@ class Source implements PipelineSource<Integer> {
 
     private static final Logger LOG = LoggerFactory.getLogger(Source.class);
 
+    private boolean isBeginCalled;
+    private boolean isCompleteCalled;
+    private List<Integer> events;
+
+    public Source(boolean isBeginCalled, boolean isCompleteCalled, List<Integer> events) {
+        this.isBeginCalled = isBeginCalled;
+        this.isCompleteCalled = isCompleteCalled;
+        this.events = events;
+    }
+
     @Override
     public void source(PipelineChain<Integer> chain) {
 
         LOG.info("Starting at source ");
-        chain.onBegin();
+        if (isBeginCalled) {
+            chain.onBegin();
+        }
         LOG.info("Starting at source begin completed ");
-        chain.output(10);
-        chain.output(11);
-        chain.output(12);
+        for (Integer e : events) {
+            chain.output(e);
+        }
+
         LOG.info("Starting at source out completed ");
 
-        chain.onComplete();
+        if (isCompleteCalled) {
+            chain.onComplete();
+        }
         LOG.info("Starting at source complete completed ");
     }
 }

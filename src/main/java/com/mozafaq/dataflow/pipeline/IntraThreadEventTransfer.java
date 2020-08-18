@@ -3,14 +3,18 @@ package com.mozafaq.dataflow.pipeline;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class IdenticalNodeMove<I, O> implements NodeMoveAware<I, O> {
+/**
+ *
+ * @author Mozaffar Afaque
+ */
+class IntraThreadEventTransfer<I, O> implements EventTransfer<I, O> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(IdenticalNodeMove.class);
+    private static final Logger LOG = LoggerFactory.getLogger(IntraThreadEventTransfer.class);
 
     final private Transformer<I, O> transformer;
     final private PipelineChain<O> chain;
 
-    public IdenticalNodeMove(Transformer<I, O> transformer, PipelineChain<O> chain) {
+    public IntraThreadEventTransfer(Transformer<I, O> transformer, PipelineChain<O> chain) {
         this.transformer = transformer;
         this.chain = chain;
     }
