@@ -46,4 +46,15 @@ public interface Transformer<I, O> {
     default void onComplete(PipelineChain<O> chain) {
         chain.onComplete();
     }
+
+    /**
+     * Identity transformer used at times. Provides input as output.
+     *
+     * @param <T> Type of the object
+     *
+     * @return identity transformer.
+     */
+    static <T> Transformer<T, T> identity()  {
+        return IdentityTransformer.identity();
+    }
 }

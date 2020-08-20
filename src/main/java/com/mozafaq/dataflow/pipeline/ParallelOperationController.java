@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Semaphore;
@@ -23,15 +24,15 @@ class ParallelOperationController<I, O> implements Runnable {
 
     // For handling the data transfer and possible exceptions.
     private ArrayBlockingQueue<List<I>> arrayBlockingQueue;
-    private Exception exception;
-    private transient Thread runningThread;
+    private volatile Exception exception;
+    private volatile Thread runningThread;
 
     // Data pipeline related ones
     final private Transformer<I, O> transformer;
     final private PipelineChain<O> chain;
     final private ParallelOperationConfig parallelOperationConfig;
 
-    private List<I> eventBatch;
+    private volatile List<I> eventBatch;
 
     // Supplementary data
     private boolean isStarted;
@@ -42,7 +43,6 @@ class ParallelOperationController<I, O> implements Runnable {
     final private Semaphore finishSemaphore;
     final private Semaphore beginSemaphore;
 
-
     // Monitors
     private final WaitMonitor waitMonitorBegin;
     private final WaitMonitor waitMonitorComplete;
@@ -52,6 +52,7 @@ class ParallelOperationController<I, O> implements Runnable {
         this.chain = chain;
         this.parallelOperationConfig = parallelOperationConfig;
 
+        this.exception = null;
         this.isStarted = false;
         this.operationCompleted = false;
         this.recordOut = 0;
@@ -67,9 +68,9 @@ class ParallelOperationController<I, O> implements Runnable {
     }
 
     @Override
-    public synchronized void run() {
+    public void run() {
 
-        LOG.info("Thread running....");
+        LOG.info(chain.getName() + "Thread running....");
         isStarted = true;
         boolean completed = false;
         try {
@@ -84,28 +85,30 @@ class ParallelOperationController<I, O> implements Runnable {
                 if (records == null) {
                     continue;
                 }
-                for (I record : records ) {
+                for (I record : records) {
                     transformer.transform(chain, record);
                 }
                 recordOut += records.size();
+                LOG.info(chain.getName() + "-The record info received " + records);
                 completed = records.isEmpty();
                 records.clear();
             }
-            operationCompleted = true;
             LOG.info("All data transfer completed.....");
 
             onCompleteHandler();
             LOG.info("End signal completed.....");
-        } catch (InterruptedException ex) {
+        } catch (Exception ex) {
             this.exception = ex;
             LOG.warn("Error occurred", ex);
         } finally {
-            operationCompleted = true;
         }
     }
 
-    public void init() {
+    public synchronized void init() {
 
+        if (runningThread != null) {
+            return;
+        }
         LOG.info(chain.getName() + "-Initializing the concurrent controller.");
         arrayBlockingQueue = new ArrayBlockingQueue<>(parallelOperationConfig.getQueueBufferSize());
         runningThread = new Thread(this);
@@ -130,31 +133,36 @@ class ParallelOperationController<I, O> implements Runnable {
         }
 
         if (eventBatch.size() == parallelOperationConfig.getEventBatchSize()) {
-            transferBatch(false);
-            eventBatch = new ArrayList<>(parallelOperationConfig.getEventBatchSize());
+            flushBuffer();
         }
         eventBatch.add(input);
     }
 
+    private synchronized void flushBuffer() {
+        List<I> existingEvents = eventBatch;
+        eventBatch = new ArrayList<>(parallelOperationConfig.getEventBatchSize());
+        transferBatch(false, existingEvents);
+    }
 
-    private void transferBatch(boolean spitEmptyList) {
+    private void transferBatch(boolean spitEmptyList, List<I> events) {
 
-        if (eventBatch.isEmpty() && !spitEmptyList) {
+        if (events.isEmpty() && !spitEmptyList) {
             return;
         }
 
-        int sizeToBeTransferred = eventBatch.size();
+        int sizeToBeTransferred = events.size();
 
         try {
             boolean isOffered;
             int countAttempt = parallelOperationConfig.getCountForInsertAttempt();
             do {
-                isOffered = arrayBlockingQueue.offer(eventBatch, parallelOperationConfig.getQueuePollDuration().toMillis(), TimeUnit.MILLISECONDS);
+                failOnChildException();
+                isOffered = arrayBlockingQueue.offer(events, parallelOperationConfig.getQueuePollDuration().toMillis(), TimeUnit.MILLISECONDS);
                 countAttempt--;
             } while (!isOffered && countAttempt > 0);
 
             if (!isOffered) {
-                throw new IllegalStateException("Could not push the data in specified time.");
+                throw new IllegalStateException(chain.getName() + "-Could not push the data in specified time.");
             }
         } catch (InterruptedException e) {
             throw new IllegalStateException(e);
@@ -170,7 +178,7 @@ class ParallelOperationController<I, O> implements Runnable {
         }
     }
 
-    public void onBegin(boolean isBeginEvent) {
+    public synchronized void onBegin(boolean isBeginEvent) {
         if (isBeginEvent) {
             waitMonitorBegin.setSignalIssued();
         }
@@ -188,16 +196,29 @@ class ParallelOperationController<I, O> implements Runnable {
         }
 
         finishSemaphore.release();
+        waitMonitorComplete.setCompleted();
+        LOG.info(chain.getName() + "-After release " + arrayBlockingQueue.size());
     }
 
-    public void onComplete() {
-        transferBatch(false);
+    public synchronized void onComplete() {
+        LOG.info(chain.getName() + "-On complete execution start.. record In: " + recordInCounter +", array size " + arrayBlockingQueue.size());
+
+        flushBuffer();
+        LOG.info(chain.getName() + "-On complete: after transferring any remaining.. record In: " + recordInCounter +", array size " + arrayBlockingQueue.size());
         waitMonitorComplete.setSignalIssued();
-        transferBatch(true);
+        transferBatch(true, Collections.emptyList());
+        LOG.info(chain.getName() + "-After complete if waiting was not issued at all.. record In: " + recordInCounter +", array size " + arrayBlockingQueue.size());
     }
 
-    public void finish() {
-        LOG.info(chain.getName() + "-Checking if waiting was not issued at all..");
+    private void failOnChildException() {
+        if (this.exception != null) {
+            throw new IllegalStateException("[" + chain.getName() + "] Exception encountered.", this.exception);
+        }
+    }
+
+    public synchronized void finish() {
+        LOG.info(chain.getName() + "-Checking if waiting was not issued at all.. record In: " + recordInCounter);
+
         if (!waitMonitorBegin.isNotified()) {
             LOG.info(chain.getName() + " -During finish - there was no begin ans no event to process. " +
                     "Calling is begin for process to flow");
@@ -210,30 +231,18 @@ class ParallelOperationController<I, O> implements Runnable {
 
         LOG.info(chain.getName() + "-Transferring the remaining data if any..");
 
-        transferBatch(false);
-
+        flushBuffer();
         LOG.info(chain.getName() + "-Transferring empty batch for finish execution");
 
-        transferBatch(true);
+        transferBatch(true, Collections.emptyList());
 
+        failOnChildException();
         try {
             LOG.info(chain.getName() + "-Acquiring subsequent execution....");
             finishSemaphore.acquire();
         } catch (InterruptedException e) {
             throw new IllegalStateException(e);
         }
-    }
-
-    public Exception getException() {
-        return exception;
-    }
-
-    public boolean isStarted() {
-        return isStarted;
-    }
-
-    public boolean isOperationCompleted() {
-        return operationCompleted;
     }
 
     public long getRecordOut() {

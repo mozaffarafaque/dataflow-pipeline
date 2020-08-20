@@ -14,7 +14,7 @@ package com.mozafaq.dataflow.pipeline;
  *
  * @author Mozaffar Afaque
  */
-public interface PipelineState<T> {
+public interface PipelineEventState<T> {
 
     /**
      * Adds the transformer in the pipeline flow.
@@ -29,7 +29,7 @@ public interface PipelineState<T> {
      *
      * @return New state.
      */
-    <O> PipelineState<O> addTransformer(String name, Transformer<T, O> transformer);
+    <O> PipelineEventState<O> addTransformer(String name, Transformer<T, O> transformer);
 
     /**
      *
@@ -41,9 +41,9 @@ public interface PipelineState<T> {
      *                               to run in the parallel.
      *
      */
-    <O> PipelineState<O> addParallelTransformer(String name,
-                                                Transformer<T, O> transformer,
-                                                ParallelOperationConfig parallelOperationConfig);
+    <O> PipelineEventState<O> addParallelTransformer(String name,
+                                                     Transformer<T, O> transformer,
+                                                     ParallelOperationConfig parallelOperationConfig);
 
     /**
      * Adds the sink in the dataflow pipeline. This is like a leaf node in

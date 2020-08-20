@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
  */
 public class Pipeline {
 
-    private PipelineStateImpl rootState;
+    private PipelineEventStateImpl rootState;
     private PipelineChainImpl rootChain;
     private boolean isFrozen = false;
     private Pipeline() {
@@ -24,16 +24,18 @@ public class Pipeline {
         return new Pipeline();
     }
 
-    public synchronized  <T> PipelineState<T>  fromSource(String name, PipelineSource<T> source) {
+    public synchronized  <T> PipelineEventState<T> fromSource(String name, PipelineSource<T> source) {
         Objects.requireNonNull(source);
         if (rootState != null) {
             throw new IllegalStateException("Source already set!");
         }
-        rootState = PipelineStateImpl.fromSource(name, source);
-        return rootState;
+        rootState = PipelineEventStateImpl.fromSource(name, source);
+        Transformer<T, T> identity = Transformer.identity();
+        PipelineEventState<T> eventState = rootState.addTransformer("<SourceIdentity-" + name + ">", identity);
+        return eventState;
     }
 
-    private void buildChainRecursive(PipelineStateImpl pipelineState) {
+    private void buildChainRecursive(PipelineEventStateImpl pipelineState) {
         if (pipelineState.getChildPipelineStates().isEmpty()) {
             // Sink Node
 
@@ -47,10 +49,16 @@ public class Pipeline {
             return;
         }
 
-        List<PipelineStateImpl> childStates = pipelineState.getChildPipelineStates();
-        for (PipelineStateImpl childState : childStates) {
+        List<PipelineEventStateImpl> childStates = pipelineState.getChildPipelineStates();
+        for (PipelineEventStateImpl childState : childStates) {
             buildChainRecursive(childState);
         }
+
+//        List<PipelineChainImpl> childChains = new ArrayList<>();
+//        for (PipelineEventStateImpl state : childStates) {
+//            List<EventTransfer> transfers = new ArrayList<>();
+//
+//        }
 
         List<PipelineChainImpl> childChains = childStates.stream()
                 .map(state -> new PipelineChainImpl(
@@ -113,29 +121,24 @@ public class Pipeline {
             throw new IllegalStateException("It is already built. " +
                     "Cannot perform build operation again.");
         }
+
         buildChainRecursive(rootState);
+
+        List<PipelineChainImpl> childChains = rootState.getChildPipelineChains();
+        assert  childChains.size() == 1;
+        rootChain = childChains.get(0);
         isFrozen = true;
     }
 
-    public void run() {
+    public synchronized void run() {
 
         if (!isFrozen) {
             throw new IllegalArgumentException("You cannot run without pipeline build!");
         }
 
-        List<PipelineChainImpl> chains = rootState.getChildPipelineChains();
-
-        for (PipelineChainImpl chain: chains) {
-            initEventTransfers(chain, true);
-        }
-
+        initEventTransfers(rootChain, true);
         Transformer transformer = rootState.getTransformer();
-        for (PipelineChainImpl chain : chains) {
-            transformer.transform(chain, null);
-        }
-
-        for (PipelineChainImpl chain: chains) {
-            initEventTransfers(chain, false);
-        }
+        transformer.transform(rootChain, null);
+        initEventTransfers(rootChain, false);
     }
 }

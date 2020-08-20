@@ -8,11 +8,11 @@ import java.util.Objects;
  *
  * @author Mozaffar Afaque
  */
-class PipelineStateImpl<S> implements PipelineState<S> {
+class PipelineEventStateImpl<S> implements PipelineEventState<S> {
 
     // Tree information
-    final private PipelineStateImpl parentState;
-    final private List<PipelineStateImpl> childPipelineStates;
+    final private PipelineEventStateImpl parentState;
+    final private List<PipelineEventStateImpl> childPipelineStates;
 
     // Transformer used for reaching to this state.
     final private Transformer transformer;
@@ -23,12 +23,13 @@ class PipelineStateImpl<S> implements PipelineState<S> {
 
     // Pipeline chains tree information
     private PipelineChainImpl parentChain;
+    private PipelineChainImpl currentChain;
     private List<PipelineChainImpl> childPipelineChains;
 
-    private PipelineStateImpl(String name,
-                              Transformer transformer,
-                              PipelineStateImpl parentState,
-                              ParallelOperationConfig parallelOperationConfig) {
+    private PipelineEventStateImpl(String name,
+                                   Transformer transformer,
+                                   PipelineEventStateImpl parentState,
+                                   ParallelOperationConfig parallelOperationConfig) {
         this.transformer = transformer;
         this.name = name;
         this.childPipelineStates = new ArrayList<>();
@@ -44,32 +45,32 @@ class PipelineStateImpl<S> implements PipelineState<S> {
         this.childPipelineChains = childPipelineChains;
     }
 
-    static <T> PipelineStateImpl<T> fromSource(String name, final PipelineSource<T> source) {
+    static <T> PipelineEventStateImpl<T> fromSource(String name, final PipelineSource<T> source) {
         Transformer<?, T> sourceTransformer = new SourceTransformer(source);
-        return new PipelineStateImpl(name, sourceTransformer, null, null);
+        return new PipelineEventStateImpl(name, sourceTransformer, null, null);
     }
 
     @Override
-    public <T> PipelineState<T> addTransformer(String name, Transformer<S, T> transformer) {
+    public <T> PipelineEventState<T> addTransformer(String name, Transformer<S, T> transformer) {
         return createPipelineState(name, transformer, null);
     }
 
     @Override
-    public <T> PipelineState<T> addParallelTransformer(String name,
-                                                       Transformer<S, T> transformer,
-                                                       ParallelOperationConfig parallelOperationConfig) {
+    public <T> PipelineEventState<T> addParallelTransformer(String name,
+                                                            Transformer<S, T> transformer,
+                                                            ParallelOperationConfig parallelOperationConfig) {
 
         Objects.requireNonNull(parallelOperationConfig,
                 "Parallel operation configuration cannot be null!");
         return createPipelineState(name, transformer, parallelOperationConfig);
     }
 
-    private <T> PipelineState<T> createPipelineState(String name,
-                                                     Transformer<S, T> transformer,
-                                                     ParallelOperationConfig parallelOperationConfig) {
+    private <T> PipelineEventState<T> createPipelineState(String name,
+                                                          Transformer<S, T> transformer,
+                                                          ParallelOperationConfig parallelOperationConfig) {
         Objects.requireNonNull(transformer);
-        PipelineStateImpl<T> newState =
-                new PipelineStateImpl(name, transformer,this, parallelOperationConfig);
+        PipelineEventStateImpl<T> newState =
+                new PipelineEventStateImpl(name, transformer,this, parallelOperationConfig);
         this.childPipelineStates.add(newState);
         return newState;
     }
@@ -89,7 +90,7 @@ class PipelineStateImpl<S> implements PipelineState<S> {
         return transformer;
     }
 
-    List<PipelineStateImpl> getChildPipelineStates() {
+    List<PipelineEventStateImpl> getChildPipelineStates() {
         return childPipelineStates;
     }
 
@@ -97,15 +98,23 @@ class PipelineStateImpl<S> implements PipelineState<S> {
         return name;
     }
 
-    PipelineStateImpl getParentState() {
+    PipelineEventStateImpl getParentState() {
         return parentState;
     }
 
-    public PipelineChainImpl getParentChain() {
+    PipelineChainImpl getParentChain() {
         return parentChain;
     }
 
-    public void setParentChain(PipelineChainImpl parentChain) {
+    void setParentChain(PipelineChainImpl parentChain) {
         this.parentChain = parentChain;
+    }
+
+    PipelineChainImpl getCurrentChain() {
+        return currentChain;
+    }
+
+    void setCurrentChain(PipelineChainImpl currentChain) {
+        this.currentChain = currentChain;
     }
 }

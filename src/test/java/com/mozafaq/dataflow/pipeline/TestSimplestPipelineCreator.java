@@ -4,8 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * @author Mozaffar Afaque
@@ -18,67 +18,46 @@ public class TestSimplestPipelineCreator implements PipelineCreateAware {
 
     private ParallelOperationConfig parallelOperationConfig;
 
-    public TestSimplestPipelineCreator(ParallelOperationConfig parallelOperationConfig, Source source) {
+    public TestSimplestPipelineCreator(ParallelOperationConfig parallelOperationConfig,
+                                       PipelineRunConfig<Integer> runConfig) {
         this.parallelOperationConfig = parallelOperationConfig;
-        this.source = source;
-    }
-
-    static class IdentityTransformer implements Transformer<Integer, Integer> {
-        private static final Logger LOG = LoggerFactory.getLogger(IdentityTransformer.class);
-
-        final private long delayBeforeOutputMillis;
-        final private long delayAfterOutputMillis;
-
-        public IdentityTransformer(long delayBeforeOutputMillis, long delayAfterOutputMillis) {
-            this.delayBeforeOutputMillis = Math.max(1l, delayBeforeOutputMillis);
-            this.delayAfterOutputMillis = Math.max(1l, delayAfterOutputMillis);
-        }
-        @Override
-        public void transform(PipelineChain<Integer> chain, Integer input) {
-            try {
-                Thread.sleep(delayBeforeOutputMillis);
-                LOG.info("Output from identity transformer - " + input);
-                chain.output(input);
-                Thread.sleep(delayAfterOutputMillis);
-            } catch (InterruptedException e) {
-                throw new IllegalStateException(e);
-            }
-        }
+        this.source = new Source(runConfig.isBeginEnabled(), runConfig.isCompleteEnabled(), runConfig.getInputEvents());
     }
 
     @Override
     public Pipeline getPipeline() {
 
         Pipeline pipeline = Pipeline.create();
-        PipelineState<Integer> intEventsFromSource = pipeline.fromSource("Source", source);
-        IdentityTransformer identityTransformer = new IdentityTransformer(1,1);
+        IntToIntIdentity identityTransformer = new IntToIntIdentity();
 
-        PipelineState<Integer> identicalEventsAsSource = // intEventsFromSource.addTransformer("Identical As Source", identityTransformer);
-                (parallelOperationConfig != null ?
-                        intEventsFromSource.addParallelTransformer("Identical As Source", identityTransformer, parallelOperationConfig)
-                        : intEventsFromSource.addTransformer("Identical As Source", identityTransformer));
+        PipelineEventState<Integer> intEventsFromSource = pipeline.fromSource("SourceNode", source);
 
-        PipelineState<Integer> square =
+        PipelineEventState<Integer> identicalEventsAsSource =
                 (parallelOperationConfig != null ?
-                        identicalEventsAsSource.addParallelTransformer("Child Square", new ChildSquare(), parallelOperationConfig)
-                        : identicalEventsAsSource.addTransformer("Child Square", new ChildSquare()));
+                        intEventsFromSource.addParallelTransformer("IdenticalAsSourceNode", identityTransformer, parallelOperationConfig)
+                        : intEventsFromSource.addTransformer("IdenticalAsSourceNode", identityTransformer));
 
-        PipelineState<Integer> cube =
+        PipelineEventState<Integer> square =
                 (parallelOperationConfig != null ?
-                        identicalEventsAsSource.addParallelTransformer("Child Cube", new ChildCube(), parallelOperationConfig)
-                        : identicalEventsAsSource.addTransformer("Child Cube", new ChildCube()));
+                        identicalEventsAsSource.addParallelTransformer("ChildSquareNode", new ChildSquare(), parallelOperationConfig)
+                        : identicalEventsAsSource.addTransformer("ChildSquareNode", new ChildSquare()));
 
-        PipelineState<Integer> identicalSquare =
+        PipelineEventState<Integer> cube =
                 (parallelOperationConfig != null ?
-                        square.addParallelTransformer("Identical As Square", identityTransformer, parallelOperationConfig)
-                        : square.addTransformer("Identical As Square", identityTransformer));
-        PipelineState<Integer> identicalCube =
-                (parallelOperationConfig != null ?
-                        cube.addParallelTransformer("Identical As Cube", identityTransformer, parallelOperationConfig)
-                        : cube.addTransformer("Identical As Cube", identityTransformer));
+                        identicalEventsAsSource.addParallelTransformer("ChildCubeNode", new ChildCube(), parallelOperationConfig)
+                        : identicalEventsAsSource.addTransformer("ChildCubeNode", new ChildCube()));
 
-        identicalSquare.sink("Square sink", customSinkSquare);
-        identicalCube.sink("Cube sink", customSinkCube);
+        PipelineEventState<Integer> identicalSquare =
+                (parallelOperationConfig != null ?
+                        square.addParallelTransformer("IdenticalAsSquareNode", identityTransformer, parallelOperationConfig)
+                        : square.addTransformer("IdenticalAsSquareNode", identityTransformer));
+        PipelineEventState<Integer> identicalCube =
+                (parallelOperationConfig != null ?
+                        cube.addParallelTransformer("IdenticalAsCubeNode", identityTransformer, parallelOperationConfig)
+                        : cube.addTransformer("IdenticalAsCubeNode", identityTransformer));
+
+        identicalSquare.sink("SquareSinkNode", customSinkSquare);
+        identicalCube.sink("CubeSinkNode", customSinkCube);
         pipeline.build();
         return pipeline;
     }
@@ -151,12 +130,23 @@ class ChildCube implements Transformer<Integer, Integer> {
     }
 }
 
-class CustomSink implements PipelineSink<Integer> {
+class ChildCubeStr implements Transformer<Integer, String> {
+    private static final Logger LOG = LoggerFactory.getLogger(ChildCube.class);
+
+    @Override
+    public void transform(PipelineChain<String> chain, Integer input) {
+        LOG.info("Before input proceed " + chain.getName() + ", Processing " + input);
+        chain.output(String.valueOf(input * input * input));
+        LOG.info("after out completed - " + chain.getName() + ", Processing " + input);
+    }
+}
+
+class CustomSink<T> implements PipelineSink<T> {
     private static final Logger LOG = LoggerFactory.getLogger(CustomSink.class);
 
     private String name;
 
-    private List<Integer> results = new ArrayList<>();
+    private List<T> results = new ArrayList<>();
     private int beginCalledCount = 0;
     private int endCalledCount = 0;
     public CustomSink(String name) {
@@ -170,7 +160,7 @@ class CustomSink implements PipelineSink<Integer> {
     }
 
     @Override
-    public void sink(Integer object) {
+    public void sink(T object) {
         results.add(object);
         LOG.info("Output: " + object + " " + name);
     }
@@ -181,7 +171,7 @@ class CustomSink implements PipelineSink<Integer> {
         LOG.info("Complete called....." + name);
     }
 
-    public List<Integer> getResults() {
+    public List<T> getResults() {
         return results;
     }
 
@@ -191,5 +181,50 @@ class CustomSink implements PipelineSink<Integer> {
 
     public int getEndCalledCount() {
         return endCalledCount;
+    }
+}
+
+
+
+class CustomSource implements PipelineSource<Integer> {
+
+    static final List<Integer> INPUT = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9,
+            10, 11, 12, 13, 14, 15, 16 ,17, 18, 19, 20);
+
+    @Override
+    public void source(PipelineChain<Integer> chain) {
+        chain.onBegin();
+        INPUT.stream().forEach(e -> chain.output(e));
+        chain.onComplete();
+    }
+}
+
+class SumOfOddsSquare implements Transformer<Integer, String> {
+
+    private int sum = 0;
+    private boolean isDownstreamStarted = false;
+
+    @Override
+    public void onBegin(PipelineChain<String> chain) {
+        // Don't start immediately
+    }
+
+    @Override
+    public void transform(PipelineChain chain, Integer input) {
+        if (sum + input > 5000) {
+            if (!isDownstreamStarted) {
+                chain.onBegin();
+                isDownstreamStarted = true;
+            }
+            chain.output(String.valueOf(sum));
+            sum = 0;
+        }
+        sum += input;
+    }
+
+    @Override
+    public void onComplete(PipelineChain chain) {
+        chain.output(String.valueOf(sum));
+        chain.onComplete();
     }
 }

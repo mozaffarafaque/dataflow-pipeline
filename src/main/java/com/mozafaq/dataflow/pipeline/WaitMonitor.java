@@ -7,6 +7,7 @@ class WaitMonitor {
 
     private boolean signalIssued = false;
     private boolean isNotified = false;
+    private boolean isCompleted = false;
 
     public synchronized boolean isSignalIssued() {
         return signalIssued;
@@ -22,5 +23,13 @@ class WaitMonitor {
 
     public synchronized void setNotified() {
         isNotified = true;
+    }
+
+    public synchronized boolean isCompleted() {
+        return isCompleted;
+    }
+
+    public synchronized void setCompleted() {
+        isCompleted = true;
     }
 }

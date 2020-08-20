@@ -51,17 +51,17 @@ public class PipelineTest {
                                     List<Integer> valueSinkEvenInt) {
 
         Pipeline pipeline = Pipeline.create();
-        PipelineState<Integer> dataInts = pipeline.fromSource("Source", new CustomSource());
-        PipelineState<Integer> dataIntThrice = dataInts.addTransformer("IntegerThrice", (a, b) -> a.output(3 * b));
-        PipelineState<Integer> dataIntSquares = dataIntThrice.addTransformer("IntegerSquare", (a, b) -> a.output(b * b));
-        PipelineState<Integer> dataSquareEvents = dataIntSquares.addTransformer("IntSquareEven", (a, b) ->
+        PipelineEventState<Integer> dataInts = pipeline.fromSource("Source", new CustomSource());
+        PipelineEventState<Integer> dataIntThrice = dataInts.addTransformer("IntegerThrice", (a, b) -> a.output(3 * b));
+        PipelineEventState<Integer> dataIntSquares = dataIntThrice.addTransformer("IntegerSquare", (a, b) -> a.output(b * b));
+        PipelineEventState<Integer> dataSquareEvents = dataIntSquares.addTransformer("IntSquareEven", (a, b) ->
         {
             if (b % 2 == 0) {
                 a.output(b);
             }
         });
 
-        PipelineState<Integer> dataSquareOdds = dataIntSquares.addTransformer("IntSquareOdd", (a, b) ->
+        PipelineEventState<Integer> dataSquareOdds = dataIntSquares.addTransformer("IntSquareOdd", (a, b) ->
         {
             if (b % 2 == 1) {
                 a.output(b);
@@ -69,10 +69,10 @@ public class PipelineTest {
         });
 
 
-        PipelineState<String> dataSquareEvenStr =
+        PipelineEventState<String> dataSquareEvenStr =
                 dataSquareEvents.addTransformer("SquareEvenString", (a, b) -> a.output(String.valueOf(b)));
 
-        PipelineState<String> dataSquareOddsStr =
+        PipelineEventState<String> dataSquareOddsStr =
                 dataSquareOdds.addTransformer("SumOfOddsSquare", new SumOfOddsSquare());
 
         dataSquareEvenStr.sink("SinkEvenStr", a -> valueSinkEvens.add(a));
@@ -114,7 +114,7 @@ public class PipelineTest {
     @Test(expectedExceptions = {NullPointerException.class})
     public void testExceptionNullParallelConfig() {
         Pipeline pipeline = Pipeline.create();
-        PipelineState<Integer> source =
+        PipelineEventState<Integer> source =
                 pipeline.fromSource("Test1" , a -> a.output(100));
         source.addParallelTransformer("NullConfig", (a, b) -> a.output(b), null);
     }
@@ -125,6 +125,7 @@ public class PipelineTest {
         Pipeline pipeline = Pipeline.create();
         pipeline.run();
     }
+
 
     @DataProvider(name = "testSimplestPipeline")
     public Object[][]  simplestPipelineDataSource() {
@@ -138,95 +139,135 @@ public class PipelineTest {
                         .build();
 
         return new Object[][]{
-                {true, true, Arrays.asList(10, 11, 12), null},
-                {true, true, Arrays.asList(10, 11, 12), parallelOperationConfig},
+                {runCase(true, true, Arrays.asList(10, 11, 12)), null},
+                {runCase(true, true, Arrays.asList(10, 11, 12)), parallelOperationConfig},
 
-                {false, true, Arrays.asList(10, 11, 12), null},
-                {false, true, Arrays.asList(10, 11, 12), parallelOperationConfig},
+                {runCase(false, true, Arrays.asList(10)), null},
+                {runCase(false, true, Arrays.asList(10)), parallelOperationConfig},
 
-                {true, false, Arrays.asList(10, 11, 12), null},
-                {true, false, Arrays.asList(10, 11, 12), parallelOperationConfig},
+                {runCase(true, false, Arrays.asList(10, 11, 12, 13, 14)), null},
+                {runCase(true, false, Arrays.asList(10, 11, 12, 13, 14)), parallelOperationConfig},
 
-                {false, false, Arrays.asList(10, 11, 12), null},
-                {false, false, Arrays.asList(10, 11, 12), parallelOperationConfig},
+                {runCase(false, false, Arrays.asList(10, 11, 12)), null},
+                {runCase(false, false, Arrays.asList(10, 11, 12)), parallelOperationConfig},
 
-                {true, true, Arrays.asList(), null},
-                {true, true, Arrays.asList(), parallelOperationConfig},
+                {runCase(true, true, Arrays.asList()), null},
+                {runCase(true, true, Arrays.asList()), parallelOperationConfig},
 
-                {true, false, Arrays.asList(), null},
-                {true, false, Arrays.asList(), parallelOperationConfig},
+                {runCase(true, false, Arrays.asList()), null},
+                {runCase(true, false, Arrays.asList()), parallelOperationConfig},
 
-                {false, true, Arrays.asList(), null},
-                {false, true, Arrays.asList(), parallelOperationConfig},
+                {runCase(false, true, Arrays.asList()), null},
+                {runCase(false, true, Arrays.asList()), parallelOperationConfig},
 
-                {false, false, Arrays.asList(), null},
-                {false, false, Arrays.asList(), parallelOperationConfig},
+                {runCase(false, false, Arrays.asList()), null},
+                {runCase(false, false, Arrays.asList()), parallelOperationConfig},
         };
     }
 
+    private PipelineRunConfig<Integer> runCase(boolean isBeginEnabled,
+                                               boolean isCompleteEnabled,
+                                               List<Integer> inputEvents) {
+        return runCase(
+                isBeginEnabled,
+                isCompleteEnabled,
+                1,
+                1,
+                inputEvents);
+    }
+    private PipelineRunConfig<Integer> runCase(boolean isBeginEnabled,
+                                               boolean isCompleteEnabled,
+                                               long beforeRecordOutWait,
+                                               long afterRecordOutWait,
+                                               List<Integer> inputEvents) {
+        return  new PipelineRunConfig<Integer>(
+                isBeginEnabled,
+                isCompleteEnabled,
+                beforeRecordOutWait,
+                afterRecordOutWait,
+                inputEvents);
+    }
+
     @Test(dataProvider = "testSimplestPipeline")
-    public void testSimplestPipeline(boolean isBeginEvent,
-                                     boolean isCompleteEvent,
-                                     List<Integer> events,
+    public void testSimplestPipeline(PipelineRunConfig<Integer> runConfig,
                                      ParallelOperationConfig parallelOperationConfig) {
 
-        Source source = new Source(isBeginEvent, isCompleteEvent, events);
 
-        TestSimplestPipelineCreator creator = new TestSimplestPipelineCreator(parallelOperationConfig, source);
+        TestSimplestPipelineCreator creator = new TestSimplestPipelineCreator(parallelOperationConfig, runConfig);
         Pipeline pipeline = creator.getPipeline();
         pipeline.run();
 
-        List<Integer> resultCube = events.stream().map(e -> e * e * e).collect(Collectors.toUnmodifiableList());
-        List<Integer> resultSquare = events.stream().map(e -> e * e).collect(Collectors.toUnmodifiableList());
+        List<Integer> resultCube = runConfig.getInputEvents().stream().map(e -> e * e * e).collect(Collectors.toUnmodifiableList());
+        List<Integer> resultSquare = runConfig.getInputEvents().stream().map(e -> e * e).collect(Collectors.toUnmodifiableList());
 
-        assertEquals(creator.getCustomSinkCube().getBeginCalledCount(), isBeginEvent ? 1 : 0);
-        assertEquals(creator.getCustomSinkCube().getEndCalledCount(), isCompleteEvent ? 1 : 0);
+        assertEquals(creator.getCustomSinkCube().getBeginCalledCount(), runConfig.isBeginEnabled() ? 1 : 0);
+        assertEquals(creator.getCustomSinkCube().getEndCalledCount(), runConfig.isCompleteEnabled() ? 1 : 0);
         assertEquals(creator.getCustomSinkCube().getResults(), resultCube);
-        assertEquals(creator.getCustomSinkSquare().getBeginCalledCount(), isBeginEvent ? 1 : 0);
-        assertEquals(creator.getCustomSinkSquare().getEndCalledCount(), isCompleteEvent ? 1 : 0);
+        assertEquals(creator.getCustomSinkSquare().getBeginCalledCount(), runConfig.isBeginEnabled() ? 1 : 0);
+        assertEquals(creator.getCustomSinkSquare().getEndCalledCount(), runConfig.isCompleteEnabled() ? 1 : 0);
         assertEquals(creator.getCustomSinkSquare().getResults(), resultSquare);
     }
-}
 
-class CustomSource implements PipelineSource<Integer> {
+    @Test(dataProvider = "testSimplestPipeline")
+    public void testSimplestPipeline2(PipelineRunConfig<Integer> runConfig,
+                                     ParallelOperationConfig parallelOperationConfig) {
+        
+        TestPipelineDataTypeExchange creator = new TestPipelineDataTypeExchange(parallelOperationConfig, runConfig);
+        Pipeline pipeline = creator.getPipeline();
+        pipeline.run();
 
-    static final List<Integer> INPUT = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9,
-            10, 11, 12, 13, 14 ,15 ,16 ,17, 18, 19, 20);
+        List<Integer> resultCube = runConfig.getInputEvents()
+                .stream().map(e -> e * e * e).collect(Collectors.toUnmodifiableList());
+        List<String> resultSquare = runConfig.getInputEvents()
+                .stream().map(e -> String.valueOf(e * e)).collect(Collectors.toUnmodifiableList());
 
-    @Override
-    public void source(PipelineChain<Integer> chain) {
-        chain.onBegin();
-        INPUT.stream().forEach(e -> chain.output(e));
-        chain.onComplete();
-    }
-}
-
-class SumOfOddsSquare implements Transformer<Integer, String> {
-
-    private int sum = 0;
-    private boolean isDownstreamStarted = false;
-
-    @Override
-    public void onBegin(PipelineChain<String> chain) {
-        // Don't start immediately
+        assertEquals(creator.getCustomSinkCube().getBeginCalledCount(), runConfig.isBeginEnabled() ? 1 : 0);
+        assertEquals(creator.getCustomSinkCube().getEndCalledCount(), runConfig.isCompleteEnabled() ? 1 : 0);
+        assertEquals(creator.getCustomSinkCube().getResults(), resultCube);
+        assertEquals(creator.getCustomSinkSquare().getBeginCalledCount(), runConfig.isBeginEnabled() ? 1 : 0);
+        assertEquals(creator.getCustomSinkSquare().getEndCalledCount(), runConfig.isCompleteEnabled() ? 1 : 0);
+        assertEquals(creator.getCustomSinkSquare().getResults(), resultSquare);
     }
 
-    @Override
-    public void transform(PipelineChain chain, Integer input) {
-        if (sum + input > 5000) {
-            if (!isDownstreamStarted) {
+    @Test
+    public void test3NodeForkAtRoot() {
+        class TestSource implements PipelineSource<Integer> {
+            private final Logger LOG = LoggerFactory.getLogger(TestSource.class);
+            @Override
+            public void source(PipelineChain<Integer> chain) {
+                LOG.info("Starting at source");
                 chain.onBegin();
-                isDownstreamStarted = true;
+                chain.output(100);
+                chain.onComplete();
+                LOG.info("Completion at source");
             }
-            chain.output(String.valueOf(sum));
-            sum = 0;
         }
-        sum += input;
-    }
 
-    @Override
-    public void onComplete(PipelineChain chain) {
-        chain.output(String.valueOf(sum));
-        chain.onComplete();
+        class TestSink implements PipelineSink<Integer> {
+            private final Logger LOG = LoggerFactory.getLogger(TestSink.class);
+
+            @Override
+            public void onBegin() {
+                LOG.info("Sink - Begin");
+            }
+            @Override
+            public void onComplete() {
+                LOG.info("Sink - Complete");
+            }
+
+            @Override
+            public void sink(Integer val) {
+                LOG.info("Starting at Sink");
+                LOG.info("Sink value - " + val);
+                LOG.info("Completion at Sink");
+            }
+        }
+
+        Pipeline pipeline = Pipeline.create();
+        PipelineEventState<Integer> source = pipeline.fromSource("Source", new TestSource());
+        source.sink("Sink1", new TestSink());
+        source.sink("Sink2", new TestSink());
+        pipeline.build();
+        pipeline.run();
     }
 }
