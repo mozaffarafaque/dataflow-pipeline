@@ -218,7 +218,6 @@ class ParallelOperationController<I, O> implements Runnable {
             onBegin(false);
         }
 
-
         flushBuffer();
 
         transferBatch(true, Collections.emptyList());

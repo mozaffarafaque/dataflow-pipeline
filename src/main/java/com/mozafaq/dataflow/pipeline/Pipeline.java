@@ -61,12 +61,6 @@ public class Pipeline {
             buildChainRecursive(childState);
         }
 
-//        List<PipelineChainImpl> childChains = new ArrayList<>();
-//        for (PipelineEventStateImpl state : childStates) {
-//            List<EventTransfer> transfers = new ArrayList<>();
-//
-//        }
-
         List<PipelineChainImpl> childChains = childStates.stream()
                 .map(state -> new PipelineChainImpl(
                         state.getName(),

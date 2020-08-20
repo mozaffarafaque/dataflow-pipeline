@@ -18,9 +18,9 @@ public interface Transformer<I, O> {
     /**
      * This should be called in the beginning of the event inject operations.
      * One can choose to implement this. However, if a transformer implements this
-     * then onBegin execution must call {@code chain.onBegin} exactly once.
+     * then onBegin execution must call @code chain.onBegin exactly once.
      *
-     * @param chain @see PipelineChain
+     * @param chain Pipeline chain.
      */
     default void onBegin(PipelineChain<O> chain) {
         chain.onBegin();
@@ -29,19 +29,21 @@ public interface Transformer<I, O> {
     /**
      * This is the actual transformation logic one needs to implement.
      * Once transformation of input object is done then output must be se
-     * given as output as {@code chain.output} with output data as
+     * given as output as @code chain.output with output data as
      * argument.
      *
-     * @param chain {@see PipelineChain}
+     * @param chain Pipeline chain.
+     *
      * @param input Input to be processed.
+     *
      */
     void transform(PipelineChain<O> chain, I input);
 
     /**
-     * Similar to {@code onBegin} except this is should be called after
+     * Similar to @code onBegin}except this is should be called after
      * all the events are processed.
      *
-     * @param chain {@see PipelineChain}
+     * @param chain Pipeline chain.
      */
     default void onComplete(PipelineChain<O> chain) {
         chain.onComplete();

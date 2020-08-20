@@ -3,10 +3,10 @@ package com.mozafaq.dataflow.pipeline;
 /**
  * This is an event event state in dataflow pipeline. This can be considered as an
  * edge in dataflow pipeline tree.
- * <br><br/>
+ *
  * If you got a state, then by adding new transformer you get new state that will be
  * transformed event depending on the transformer that is added.
- * <br><br/>
+ *
  * This allows to add transformer that runs concurrently that runs in
  * separate thread then the parent from where the events are received.
  *
@@ -33,13 +33,19 @@ public interface PipelineEventState<T> {
 
     /**
      *
-     * This is exactly similar to other {@code addTransformer} with 2 arguments
+     * This is exactly similar to other @code addTransformer with 2 arguments
      * except changed behaviour that this processing will take place in parallel.
      * Additional parameter defines the configuration for parallelism.
      *
+     * @param name Name of the transformer step
      * @param parallelOperationConfig Mandatory parameter for transformer
      *                               to run in the parallel.
      *
+     * @param transformer that will be applied on the current state. This transfer can
+     *                    provide the different type as output.
+     * @param <O> Type of the output parameters.
+     *
+     * @return New state
      */
     <O> PipelineEventState<O> addParallelTransformer(String name,
                                                      Transformer<T, O> transformer,
@@ -51,7 +57,7 @@ public interface PipelineEventState<T> {
      *
      * @param name Name of the sink.
      *
-     * @param sink Sink object, implementation of {@code PipelineSink}
+     * @param sink Sink object, implementation of @code PipelineSink
      */
     void sink(String name, final PipelineSink<T> sink);
 }
