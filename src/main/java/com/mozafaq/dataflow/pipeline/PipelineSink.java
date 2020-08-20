@@ -10,5 +10,5 @@ public interface PipelineSink<T> {
     void sink(T object);
     default void onComplete() {
         // Do Nothing
-    } ;
+    };
 }

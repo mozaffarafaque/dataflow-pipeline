@@ -16,7 +16,6 @@ class SourceTransformer implements Transformer
        //At source, don't call on begin, This should be client choice
     }
 
-
     @Override
     public void transform(PipelineChain chain, Object input) {
         pipelineSource.source(chain);
