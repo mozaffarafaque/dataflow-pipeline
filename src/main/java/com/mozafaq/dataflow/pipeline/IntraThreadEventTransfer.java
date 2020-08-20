@@ -48,4 +48,9 @@ class IntraThreadEventTransfer<I, O> implements EventTransfer<I, O> {
     public void finish() {
         // Do nothing
     }
+
+    @Override
+    public void killRunningParallelExecutions() {
+        // Do nothing
+    }
 }

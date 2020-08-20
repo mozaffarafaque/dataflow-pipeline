@@ -2,50 +2,48 @@ package com.mozafaq.dataflow.pipeline;
 
 import java.util.List;
 
+/**
+ * @author Mozaffar Afaque
+ */
 public class PipelineRunConfig<T> {
 
-    private boolean isBeginEnabled;
-    private boolean isCompleteEnabled;
-    private long beforeRecordOutWait;
-    private long afterRecordOutWait;
-    private List<T> inputEvents ;
+    private boolean beginCall;
+    private boolean completeCall;
+    private DelayConfig delayConfig = new DelayConfig(1,1,1,1);
+    private List<T> events;
 
-    public PipelineRunConfig(boolean isBeginEnabled, boolean isCompleteEnabled, long beforeRecordOutWait, long afterRecordOutWait, List<T> inputEvents) {
-        this.isBeginEnabled = isBeginEnabled;
-        this.isCompleteEnabled = isCompleteEnabled;
-        this.beforeRecordOutWait = beforeRecordOutWait;
-        this.afterRecordOutWait = afterRecordOutWait;
-        this.inputEvents = inputEvents;
+    public PipelineRunConfig(boolean beginCall, boolean completeCall, DelayConfig delayConfig, List<T> events) {
+        this.beginCall = beginCall;
+        this.completeCall = completeCall;
+        this.events = events;
+        if (delayConfig != null) {
+            this.delayConfig = delayConfig;
+        }
     }
 
-    public boolean isBeginEnabled() {
-        return isBeginEnabled;
+    public boolean isBeginCall() {
+        return beginCall;
     }
 
-    public boolean isCompleteEnabled() {
-        return isCompleteEnabled;
+    public boolean isCompleteCall() {
+        return completeCall;
     }
 
-    public long getBeforeRecordOutWait() {
-        return beforeRecordOutWait;
+    public List<T> getEvents() {
+        return events;
     }
 
-    public long getAfterRecordOutWait() {
-        return afterRecordOutWait;
-    }
-
-    public List<T> getInputEvents() {
-        return inputEvents;
+    public DelayConfig getDelayConfig() {
+        return delayConfig;
     }
 
     @Override
     public String toString() {
         return "PipelineRunConfig{" +
-                 isBeginEnabled +
-                ", " + isCompleteEnabled +
-                ", " + beforeRecordOutWait +
-                ", " + afterRecordOutWait +
-                ", events=" + inputEvents +
+                beginCall +
+                ", " + completeCall +
+                ", Delay:" + delayConfig +
+                ", events=" + events +
                 '}';
     }
 }

@@ -14,6 +14,13 @@ import java.util.stream.Collectors;
  */
 public class Pipeline {
 
+
+    enum Action {
+        START,
+        FINISH,
+        KILL
+    }
+
     private PipelineEventStateImpl rootState;
     private PipelineChainImpl rootChain;
     private boolean isFrozen = false;
@@ -92,7 +99,7 @@ public class Pipeline {
         }
     }
 
-    private void initEventTransfers(PipelineChainImpl pipelineChain, final boolean isStart) {
+    private void initEventTransfers(PipelineChainImpl pipelineChain, final Action action) {
 
         List<EventTransfer> eventTransfers = pipelineChain.getEventTransfers();
 
@@ -102,15 +109,17 @@ public class Pipeline {
         }
 
         for (EventTransfer transfer : eventTransfers) {
-            if (isStart) {
+            if (action == Action.START) {
                 transfer.init();
-            } else {
+            } else if (action == Action.FINISH) {
                 transfer.finish();
+            } else if (action == Action.KILL) {
+                transfer.killRunningParallelExecutions();
             }
         }
 
         for (EventTransfer transfer : eventTransfers) {
-            initEventTransfers(transfer.chain(), isStart);
+            initEventTransfers(transfer.chain(), action);
         }
     }
 
@@ -136,9 +145,14 @@ public class Pipeline {
             throw new IllegalArgumentException("You cannot run without pipeline build!");
         }
 
-        initEventTransfers(rootChain, true);
-        Transformer transformer = rootState.getTransformer();
-        transformer.transform(rootChain, null);
-        initEventTransfers(rootChain, false);
+        try {
+            initEventTransfers(rootChain, Action.START);
+            Transformer transformer = rootState.getTransformer();
+            transformer.transform(rootChain, null);
+            initEventTransfers(rootChain, Action.FINISH);
+        } catch (RuntimeException e) {
+            initEventTransfers(rootChain, Action.KILL);
+            throw new RuntimeException("There was an error occurred while executing the pipeline", e);
+        }
     }
 }

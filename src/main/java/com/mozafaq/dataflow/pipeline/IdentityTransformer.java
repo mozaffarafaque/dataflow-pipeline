@@ -1,5 +1,9 @@
 package com.mozafaq.dataflow.pipeline;
 
+/**
+ *
+ * @author Mozaffar Afaque
+ */
 class IdentityTransformer<T> implements Transformer<T, T> {
 
     private static final Transformer IDENTITY = new IdentityTransformer();

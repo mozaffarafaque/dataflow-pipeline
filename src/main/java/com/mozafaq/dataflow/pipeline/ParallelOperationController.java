@@ -20,23 +20,21 @@ import java.util.concurrent.TimeUnit;
 
 class ParallelOperationController<I, O> implements Runnable {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ParallelOperationController.class);
+    private final Logger LOG = LoggerFactory.getLogger(ParallelOperationController.class);
 
     // For handling the data transfer and possible exceptions.
-    private ArrayBlockingQueue<List<I>> arrayBlockingQueue;
+    private ArrayBlockingQueue<List<I>> transferQueue;
     private volatile Exception exception;
     private volatile Thread runningThread;
 
     // Data pipeline related ones
     final private Transformer<I, O> transformer;
     final private PipelineChain<O> chain;
-    final private ParallelOperationConfig parallelOperationConfig;
+    final private ParallelOperationConfig operationConfig;
 
     private volatile List<I> eventBatch;
 
     // Supplementary data
-    private boolean isStarted;
-    private boolean operationCompleted;
     private long recordOut;
     private long recordInCounter;
 
@@ -47,14 +45,12 @@ class ParallelOperationController<I, O> implements Runnable {
     private final WaitMonitor waitMonitorBegin;
     private final WaitMonitor waitMonitorComplete;
 
-    public ParallelOperationController(Transformer<I, O> transformer, PipelineChain<O> chain, ParallelOperationConfig parallelOperationConfig) {
+    public ParallelOperationController(Transformer<I, O> transformer, PipelineChain<O> chain, ParallelOperationConfig operationConfig) {
         this.transformer = transformer;
         this.chain = chain;
-        this.parallelOperationConfig = parallelOperationConfig;
+        this.operationConfig = operationConfig;
 
         this.exception = null;
-        this.isStarted = false;
-        this.operationCompleted = false;
         this.recordOut = 0;
         this.recordInCounter = 0;
 
@@ -64,23 +60,22 @@ class ParallelOperationController<I, O> implements Runnable {
         this.finishSemaphore = new Semaphore(1);
         this.beginSemaphore = new Semaphore(1);
 
-        this.eventBatch = new ArrayList<>(parallelOperationConfig.getEventBatchSize());
+        this.eventBatch = new ArrayList<>(operationConfig.getEventBatchSize());
     }
 
     @Override
     public void run() {
 
-        LOG.info(chain.getName() + "Thread running....");
-        isStarted = true;
+        LOG.info(chain.getName() + ": Thread running.");
         boolean completed = false;
         try {
             onBeginHandler();
-            LOG.info("Begin signal received....");
+            LOG.info(chain.getName() + ": Begin signal received.");
 
             while (!completed) {
 
-                List<I> records = arrayBlockingQueue.poll(
-                        parallelOperationConfig.getQueuePollDuration().toMillis(), TimeUnit.MILLISECONDS
+                List<I> records = transferQueue.poll(
+                        operationConfig.getQueuePollDuration().toMillis(), TimeUnit.MILLISECONDS
                 );
                 if (records == null) {
                     continue;
@@ -89,18 +84,18 @@ class ParallelOperationController<I, O> implements Runnable {
                     transformer.transform(chain, record);
                 }
                 recordOut += records.size();
-                LOG.info(chain.getName() + "-The record info received " + records);
                 completed = records.isEmpty();
                 records.clear();
             }
-            LOG.info("All data transfer completed.....");
+            LOG.info(chain.getName() + ": All data transfer completed.");
 
-            onCompleteHandler();
-            LOG.info("End signal completed.....");
+            onCompleteHandler(true);
+            LOG.info(chain.getName() + ": End signal completed.");
         } catch (Exception ex) {
             this.exception = ex;
-            LOG.warn("Error occurred", ex);
+            LOG.warn(chain.getName() + ": Error occurred", this.exception);
         } finally {
+            onCompleteHandler(false);
         }
     }
 
@@ -109,8 +104,8 @@ class ParallelOperationController<I, O> implements Runnable {
         if (runningThread != null) {
             return;
         }
-        LOG.info(chain.getName() + "-Initializing the concurrent controller.");
-        arrayBlockingQueue = new ArrayBlockingQueue<>(parallelOperationConfig.getQueueBufferSize());
+        LOG.info(chain.getName() + ": Initializing the concurrent controller.");
+        transferQueue = new ArrayBlockingQueue<>(operationConfig.getQueueBufferSize());
         runningThread = new Thread(this);
         runningThread.setName(Thread.currentThread().getName() + "-child-" + chain.getName());
         runningThread.setDaemon(true);
@@ -123,7 +118,6 @@ class ParallelOperationController<I, O> implements Runnable {
         }
 
         runningThread.start();
-        LOG.info(chain.getName() + "-Completed the concurrent controller.");
     }
 
     public void transfer(I input) {
@@ -132,7 +126,7 @@ class ParallelOperationController<I, O> implements Runnable {
             onBegin(false);
         }
 
-        if (eventBatch.size() == parallelOperationConfig.getEventBatchSize()) {
+        if (eventBatch.size() == operationConfig.getEventBatchSize()) {
             flushBuffer();
         }
         eventBatch.add(input);
@@ -140,7 +134,7 @@ class ParallelOperationController<I, O> implements Runnable {
 
     private synchronized void flushBuffer() {
         List<I> existingEvents = eventBatch;
-        eventBatch = new ArrayList<>(parallelOperationConfig.getEventBatchSize());
+        eventBatch = new ArrayList<>(operationConfig.getEventBatchSize());
         transferBatch(false, existingEvents);
     }
 
@@ -154,15 +148,15 @@ class ParallelOperationController<I, O> implements Runnable {
 
         try {
             boolean isOffered;
-            int countAttempt = parallelOperationConfig.getCountForInsertAttempt();
+            int countAttempt = operationConfig.getCountForInsertAttempt();
             do {
                 failOnChildException();
-                isOffered = arrayBlockingQueue.offer(events, parallelOperationConfig.getQueuePollDuration().toMillis(), TimeUnit.MILLISECONDS);
+                isOffered = transferQueue.offer(events, operationConfig.getQueuePollDuration().toMillis(), TimeUnit.MILLISECONDS);
                 countAttempt--;
             } while (!isOffered && countAttempt > 0);
 
             if (!isOffered) {
-                throw new IllegalStateException(chain.getName() + "-Could not push the data in specified time.");
+                throw new IllegalStateException(chain.getName() + ": Could not push the data in specified time.");
             }
         } catch (InterruptedException e) {
             throw new IllegalStateException(e);
@@ -189,25 +183,21 @@ class ParallelOperationController<I, O> implements Runnable {
         }
     }
 
-    private void onCompleteHandler()  {
+    private void onCompleteHandler(boolean completeCallEnabled)  {
 
-        if (waitMonitorComplete.isSignalIssued()) {
+        if (completeCallEnabled && waitMonitorComplete.isSignalIssued()) {
             transformer.onComplete(chain);
         }
 
         finishSemaphore.release();
         waitMonitorComplete.setCompleted();
-        LOG.info(chain.getName() + "-After release " + arrayBlockingQueue.size());
     }
 
     public synchronized void onComplete() {
-        LOG.info(chain.getName() + "-On complete execution start.. record In: " + recordInCounter +", array size " + arrayBlockingQueue.size());
 
         flushBuffer();
-        LOG.info(chain.getName() + "-On complete: after transferring any remaining.. record In: " + recordInCounter +", array size " + arrayBlockingQueue.size());
         waitMonitorComplete.setSignalIssued();
         transferBatch(true, Collections.emptyList());
-        LOG.info(chain.getName() + "-After complete if waiting was not issued at all.. record In: " + recordInCounter +", array size " + arrayBlockingQueue.size());
     }
 
     private void failOnChildException() {
@@ -217,11 +207,10 @@ class ParallelOperationController<I, O> implements Runnable {
     }
 
     public synchronized void finish() {
-        LOG.info(chain.getName() + "-Checking if waiting was not issued at all.. record In: " + recordInCounter);
 
         if (!waitMonitorBegin.isNotified()) {
-            LOG.info(chain.getName() + " -During finish - there was no begin ans no event to process. " +
-                    "Calling is begin for process to flow");
+            LOG.info(chain.getName() + ": During finish - there was no begin ans no event to process. " +
+                    "Calling is begin for process to flow.");
 
             // In case of there is not explicit begin call and there is no
             // event in this then, we should just make sure the start is
@@ -229,19 +218,29 @@ class ParallelOperationController<I, O> implements Runnable {
             onBegin(false);
         }
 
-        LOG.info(chain.getName() + "-Transferring the remaining data if any..");
 
         flushBuffer();
-        LOG.info(chain.getName() + "-Transferring empty batch for finish execution");
 
         transferBatch(true, Collections.emptyList());
 
         failOnChildException();
         try {
-            LOG.info(chain.getName() + "-Acquiring subsequent execution....");
-            finishSemaphore.acquire();
+            LOG.info(chain.getName() + "-Acquiring subsequent execution.");
+            boolean isAcquired = finishSemaphore.tryAcquire(operationConfig.getQueuePollDuration().toMillis() * operationConfig.getCountForInsertAttempt(), TimeUnit.MILLISECONDS);
+            if (!isAcquired) {
+                throw new IllegalStateException( chain.getName() + ": Child thread could not complete execution.");
+            }
+
         } catch (InterruptedException e) {
             throw new IllegalStateException(e);
+        }
+        failOnChildException();
+    }
+
+    public void killRunningParallelExecutions() {
+        if (runningThread.getState() != Thread.State.TERMINATED) {
+            LOG.warn(chain.getName() + ": Killing this thread because of child exception/timeout/termination", this.exception);
+            runningThread.interrupt();
         }
     }
 
@@ -259,5 +258,6 @@ class ParallelOperationController<I, O> implements Runnable {
         }
         return runningThread.getState();
     }
+
 }
 

@@ -38,7 +38,6 @@ public class ParallelOperationConfig {
         return eventBatchSize;
     }
 
-
     public static class ParallelOperationConfigBuilder {
         private ParallelOperationConfig  parallelOperationConfig = new ParallelOperationConfig();
 

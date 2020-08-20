@@ -13,4 +13,5 @@ interface EventTransfer<I, O> {
     void onComplete();
     PipelineChainImpl<O> chain();
     void finish();
+    void killRunningParallelExecutions();
 }

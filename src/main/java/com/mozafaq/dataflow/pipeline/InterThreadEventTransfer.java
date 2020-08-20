@@ -58,4 +58,9 @@ class InterThreadEventTransfer<I, O> implements EventTransfer<I, O> {
     public void finish() {
         parallelOperationController.finish();
     }
+
+    @Override
+    public void killRunningParallelExecutions() {
+        parallelOperationController.killRunningParallelExecutions();
+    }
 }
