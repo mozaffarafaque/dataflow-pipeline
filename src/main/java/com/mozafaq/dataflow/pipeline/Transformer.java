@@ -15,6 +15,8 @@ package com.mozafaq.dataflow.pipeline;
  */
 public interface Transformer<I, O> {
 
+    static final Transformer IDENTITY = (PipelineChain chain, Object input) -> chain.output(input);
+
     /**
      * This should be called in the beginning of the event inject operations.
      * One can choose to implement this. However, if a transformer implements this
@@ -57,6 +59,6 @@ public interface Transformer<I, O> {
      * @return identity transformer.
      */
     static <T> Transformer<T, T> identity()  {
-        return IdentityTransformer.identity();
+        return IDENTITY;
     }
 }
